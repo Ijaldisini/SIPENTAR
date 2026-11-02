@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../register/register_view.dart';
-
 class WelcomeView extends StatelessWidget {
   const WelcomeView({super.key});
 
