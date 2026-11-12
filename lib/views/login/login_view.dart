@@ -139,7 +139,11 @@ class LoginView extends StatelessWidget {
                             height: 56,
                             child: ElevatedButton(
                               onPressed: () {
-                                // Fungsi login akan ditambahkan nanti.
+                                Navigator.pushNamedAndRemoveUntil(
+                                  context,
+                                  '/dashboard',
+                                  (route) => false,
+                                );
                               },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: primaryColor,

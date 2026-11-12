@@ -4,6 +4,8 @@ import 'views/splash/splash_view.dart';
 import 'views/welcome/welcome_view.dart';
 import 'views/register/register_view.dart';
 import 'views/login/login_view.dart';
+import 'views/dashboard/dashboard_view.dart';
+import 'views/keuangan_stok/keuangan_stok_view.dart';
 
 void main() {
   runApp(const MyApp());
@@ -25,6 +27,8 @@ class MyApp extends StatelessWidget {
         '/welcome': (context) => const WelcomeView(),
         '/register': (context) => const RegisterView(),
         '/login': (context) => const LoginView(),
+        '/dashboard': (context) => const DashboardView(),
+        '/keuangan-stok': (context) => const KeuanganStokView(),
       },
       home: const SplashView(),
     );
