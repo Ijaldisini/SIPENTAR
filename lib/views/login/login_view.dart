@@ -1,9 +1,67 @@
 import 'package:flutter/material.dart';
 
-class LoginView extends StatelessWidget {
+import '../../controllers/auth/auth_controller.dart';
+
+class LoginView extends StatefulWidget {
   const LoginView({super.key});
 
+  @override
+  State<LoginView> createState() => _LoginViewState();
+}
+
+class _LoginViewState extends State<LoginView> {
   static const Color primaryColor = Color(0xFF6E8649);
+
+  late final TextEditingController _usernameController;
+  late final TextEditingController _passwordController;
+  late final AuthController _authController;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _usernameController = TextEditingController();
+    _passwordController = TextEditingController();
+
+    _authController = AuthController();
+    _authController.addListener(_onControllerChanged);
+  }
+
+  // Mendengarkan perubahan state Controller
+  void _onControllerChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  // Mengirim data login
+  Future<void> _submitLogin() async {
+    final success = await _authController.login(
+      username: _usernameController.text,
+      password: _passwordController.text,
+    );
+
+    if (!mounted) return;
+
+    if (success) {
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        '/dashboard',
+        (route) => false,
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _usernameController.dispose();
+    _passwordController.dispose();
+
+    _authController.removeListener(_onControllerChanged);
+    _authController.dispose();
+
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -17,6 +75,7 @@ class LoginView extends StatelessWidget {
 
           return Stack(
             children: [
+              // Background image
               Positioned(
                 top: 0,
                 left: 0,
@@ -29,6 +88,7 @@ class LoginView extends StatelessWidget {
                 ),
               ),
 
+              // Gradient overlay
               Positioned(
                 top: 0,
                 left: 0,
@@ -50,6 +110,7 @@ class LoginView extends StatelessWidget {
                 ),
               ),
 
+              // Header buttons
               Positioned(
                 top: MediaQuery.paddingOf(context).top + 24,
                 left: 24,
@@ -63,6 +124,7 @@ class LoginView extends StatelessWidget {
                 ),
               ),
 
+              // Login heading
               Positioned(
                 top: screenHeight * 0.465,
                 left: 24,
@@ -97,6 +159,7 @@ class LoginView extends StatelessWidget {
                 ),
               ),
 
+              // Login form panel
               Positioned(
                 top: panelTop,
                 left: 0,
@@ -118,18 +181,61 @@ class LoginView extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          // Username field
                           _buildInputField(
                             label: 'Username',
                             hint: 'Masukkan username',
+                            controller: _usernameController,
                           ),
 
                           const SizedBox(height: 16),
 
+                          // Password field
                           _buildInputField(
                             label: 'Password',
                             hint: 'Masukkan password',
                             obscureText: true,
+                            controller: _passwordController,
                           ),
+
+                          // Error message
+                          if (_authController.errorMessage != null) ...[
+                            const SizedBox(height: 16),
+
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFFEDEA),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: const Color(0xFFE8B9B2),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.error_outline_rounded,
+                                    color: Color(0xFFAE4E3D),
+                                    size: 20,
+                                  ),
+
+                                  const SizedBox(width: 8),
+
+                                  Expanded(
+                                    child: Text(
+                                      _authController.errorMessage!,
+                                      style: const TextStyle(
+                                        color: Color(0xFFAE4E3D),
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
 
                           const SizedBox(height: 20),
 
@@ -138,33 +244,41 @@ class LoginView extends StatelessWidget {
                             width: double.infinity,
                             height: 56,
                             child: ElevatedButton(
-                              onPressed: () {
-                                Navigator.pushNamedAndRemoveUntil(
-                                  context,
-                                  '/dashboard',
-                                  (route) => false,
-                                );
-                              },
+                              onPressed: _authController.isLoading
+                                  ? null
+                                  : _submitLogin,
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: primaryColor,
                                 foregroundColor: Colors.white,
+                                disabledBackgroundColor: primaryColor,
+                                disabledForegroundColor: Colors.white,
                                 elevation: 0,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(16),
                                 ),
                               ),
-                              child: const Text(
-                                'Login',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
+                              child: _authController.isLoading
+                                  ? const SizedBox(
+                                      width: 22,
+                                      height: 22,
+                                      child: CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Text(
+                                      'Login',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
                             ),
                           ),
 
                           const SizedBox(height: 12),
 
+                          // Register navigation
                           Center(
                             child: Wrap(
                               alignment: WrapAlignment.center,
@@ -216,6 +330,7 @@ class LoginView extends StatelessWidget {
     );
   }
 
+  // Glassy header button
   Widget _buildHeaderButton(BuildContext context, String title) {
     return Material(
       color: Colors.transparent,
@@ -249,9 +364,11 @@ class LoginView extends StatelessWidget {
     );
   }
 
+  // Reusable input field
   Widget _buildInputField({
     required String label,
     required String hint,
+    required TextEditingController controller,
     bool obscureText = false,
   }) {
     return Column(
@@ -272,6 +389,7 @@ class LoginView extends StatelessWidget {
           width: double.infinity,
           height: 56,
           child: TextField(
+            controller: controller,
             obscureText: obscureText,
             textAlignVertical: TextAlignVertical.center,
             cursorColor: primaryColor,
