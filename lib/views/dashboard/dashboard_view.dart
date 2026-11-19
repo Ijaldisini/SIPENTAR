@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/bottom_navigation.dart';
+
 class DashboardView extends StatelessWidget {
   const DashboardView({super.key});
 
@@ -64,7 +66,20 @@ class DashboardView extends StatelessWidget {
             left: 24,
             right: 24,
             bottom: 12 + bottomInset,
-            child: _buildBottomNavigation(context),
+            child: BottomNavigation(
+              currentIndex: 0,
+              onTap: (index) {
+                if (index == 1) {
+                  Navigator.pushReplacementNamed(context, '/keuangan-stok');
+                } else if (index != 0) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Halaman ini belum tersedia.'),
+                    ),
+                  );
+                }
+              },
+            ),
           ),
         ],
       ),
@@ -543,104 +558,6 @@ class DashboardView extends StatelessWidget {
             style: const TextStyle(color: primaryColor, fontSize: 11),
           ),
         ],
-      ),
-    );
-  }
-
-  // Fixed bottom navigation
-  Widget _buildBottomNavigation(BuildContext context) {
-    return Container(
-      height: 64,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      decoration: BoxDecoration(
-        color: const Color(0xFFE9EEE3),
-        borderRadius: BorderRadius.circular(50),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x12000000),
-            blurRadius: 16,
-            offset: Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: _buildNavItem(
-              icon: Icons.home_outlined,
-              label: 'Beranda',
-              selected: true,
-            ),
-          ),
-
-          Expanded(
-            child: _buildNavItem(
-              icon: Icons.account_balance_wallet_outlined,
-              label: 'Keuangan',
-              onTap: () {
-                Navigator.pushNamed(context, '/keuangan-stok');
-              },
-            ),
-          ),
-
-          Expanded(
-            child: _buildNavItem(icon: Icons.spa_outlined, label: 'Budidaya'),
-          ),
-
-          Expanded(
-            child: _buildNavItem(
-              icon: Icons.health_and_safety_outlined,
-              label: 'Kesehatan',
-            ),
-          ),
-
-          Expanded(
-            child: _buildNavItem(
-              icon: Icons.person_outline_rounded,
-              label: 'Akun',
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Bottom navigation item
-  Widget _buildNavItem({
-    required IconData icon,
-    required String label,
-    bool selected = false,
-    VoidCallback? onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(25),
-      child: Container(
-        decoration: BoxDecoration(
-          color: selected
-              ? Colors.white.withValues(alpha: 0.55)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(25),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: const Color(0xFF536348), size: 19),
-
-            const SizedBox(height: 2),
-
-            Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.clip,
-              style: TextStyle(
-                color: const Color(0xFF536348),
-                fontSize: 9,
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

@@ -1,5 +1,12 @@
 import 'package:flutter/material.dart';
 
+import 'stock_form_view.dart';
+import 'transaction_form_view.dart';
+import 'kalkulasi_hpp_view.dart';
+import 'pembagian_kas_view.dart';
+import 'laporan_keuangan_view.dart';
+import '../widgets/bottom_navigation.dart';
+
 class KeuanganStokView extends StatefulWidget {
   const KeuanganStokView({super.key});
 
@@ -110,7 +117,20 @@ class _KeuanganStokViewState extends State<KeuanganStokView> {
             left: 24,
             right: 24,
             bottom: 12 + bottomInset,
-            child: _buildBottomNavigation(context),
+            child: BottomNavigation(
+              currentIndex: 1,
+              onTap: (index) {
+                if (index == 0) {
+                  Navigator.pushReplacementNamed(context, '/dashboard');
+                } else if (index != 1) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Halaman ini belum tersedia.'),
+                    ),
+                  );
+                }
+              },
+            ),
           ),
         ],
       ),
@@ -241,7 +261,7 @@ class _KeuanganStokViewState extends State<KeuanganStokView> {
         const SizedBox(height: 14),
 
         // Quick actions
-        _buildQuickActions(),
+        _buildQuickActions(context),
 
         const SizedBox(height: 14),
 
@@ -369,56 +389,104 @@ class _KeuanganStokViewState extends State<KeuanganStokView> {
     );
   }
 
-  Widget _buildQuickActions() {
+  Widget _buildQuickActions(BuildContext context) {
     return Row(
       children: [
         Expanded(
-          child: _buildActionItem(icon: Icons.add_rounded, label: 'Catat kas'),
+          child: _buildActionItem(
+            icon: Icons.add_rounded,
+            label: 'Catat kas',
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const TransactionFormView(
+                    initialType: TransactionType.income,
+                  ),
+                ),
+              );
+            },
+          ),
         ),
         Expanded(
-          child: _buildActionItem(icon: Icons.calculate_outlined, label: 'HPP'),
+          child: _buildActionItem(
+            icon: Icons.calculate_outlined,
+            label: 'HPP',
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const KalkulasiHppView(),
+                ),
+              );
+            },
+          ),
         ),
         Expanded(
           child: _buildActionItem(
             icon: Icons.pie_chart_outline_rounded,
             label: 'Bagi kas',
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const PembagianKasView(),
+                ),
+              );
+            },
           ),
         ),
         Expanded(
           child: _buildActionItem(
             icon: Icons.chevron_right_rounded,
             label: 'Laporan',
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const LaporanKeuanganView(),
+                ),
+              );
+            },
           ),
         ),
       ],
     );
   }
 
-  Widget _buildActionItem({required IconData icon, required String label}) {
-    return Column(
-      children: [
-        Container(
-          width: 48,
-          height: 48,
-          decoration: BoxDecoration(
-            color: softColor,
-            borderRadius: BorderRadius.circular(16),
+  Widget _buildActionItem({
+    required IconData icon,
+    required String label,
+    VoidCallback? onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Column(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: softColor,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(icon, color: primaryColor, size: 23),
           ),
-          child: Icon(icon, color: primaryColor, size: 23),
-        ),
 
-        const SizedBox(height: 8),
+          const SizedBox(height: 8),
 
-        Text(
-          label,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            color: textColor,
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: textColor,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -663,7 +731,7 @@ class _KeuanganStokViewState extends State<KeuanganStokView> {
           ...filteredStockItems.map(
             (item) => Padding(
               padding: const EdgeInsets.only(bottom: 12),
-              child: _buildStockItem(item),
+              child: _buildStockItem(context, item),
             ),
           ),
 
@@ -675,7 +743,10 @@ class _KeuanganStokViewState extends State<KeuanganStokView> {
           height: 52,
           child: ElevatedButton.icon(
             onPressed: () {
-              // Form tambah stok akan dibuat nanti.
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const StockFormView()),
+              );
             },
             icon: const Icon(Icons.add_rounded, size: 22),
             label: const Text(
@@ -888,7 +959,7 @@ class _KeuanganStokViewState extends State<KeuanganStokView> {
   // STOCK ITEM
   // =========================
 
-  Widget _buildStockItem(Map<String, String> item) {
+  Widget _buildStockItem(BuildContext context, Map<String, String> item) {
     final isLowStock = item['status'] == 'Menipis';
 
     return Container(
@@ -967,7 +1038,24 @@ class _KeuanganStokViewState extends State<KeuanganStokView> {
           const SizedBox(width: 8),
 
           // Edit icon (UI only)
-          const Icon(Icons.edit_outlined, color: Color(0xFF70786B), size: 17),
+          IconButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) =>
+                      StockFormView(isEdit: true, initialData: item),
+                ),
+              );
+            },
+            icon: const Icon(
+              Icons.edit_outlined,
+              color: Color(0xFF70786B),
+              size: 17,
+            ),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 36),
+          ),
         ],
       ),
     );
@@ -1004,107 +1092,6 @@ class _KeuanganStokViewState extends State<KeuanganStokView> {
             style: const TextStyle(color: Color(0xFF70786B), fontSize: 10),
           ),
         ],
-      ),
-    );
-  }
-
-  // =========================
-  // BOTTOM NAVIGATION
-  // =========================
-
-  Widget _buildBottomNavigation(BuildContext context) {
-    return Container(
-      height: 56,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      decoration: BoxDecoration(
-        color: const Color(0xFFE9EEE3),
-        borderRadius: BorderRadius.circular(50),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: _buildNavItem(
-              context,
-              icon: Icons.home_outlined,
-              label: 'Beranda',
-            ),
-          ),
-
-          Expanded(
-            child: _buildNavItem(
-              context,
-              icon: Icons.account_balance_wallet_outlined,
-              label: 'Keuangan',
-              selected: true,
-            ),
-          ),
-
-          Expanded(
-            child: _buildNavItem(
-              context,
-              icon: Icons.calendar_month_outlined,
-              label: 'Budidaya',
-            ),
-          ),
-
-          Expanded(
-            child: _buildNavItem(
-              context,
-              icon: Icons.favorite_border_rounded,
-              label: 'Kesehatan',
-            ),
-          ),
-
-          Expanded(
-            child: _buildNavItem(
-              context,
-              icon: Icons.people_outline_rounded,
-              label: 'Akun',
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNavItem(
-    BuildContext context, {
-    required IconData icon,
-    required String label,
-    bool selected = false,
-  }) {
-    return GestureDetector(
-      onTap: () {
-        if (label == 'Beranda') {
-          Navigator.pushReplacementNamed(context, '/dashboard');
-        }
-      },
-      child: Container(
-        height: 47,
-        decoration: BoxDecoration(
-          color: selected
-              ? Colors.white.withValues(alpha: 0.55)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(25),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 19, color: primaryColor),
-
-            const SizedBox(height: 2),
-
-            Text(
-              label,
-              maxLines: 1,
-              style: const TextStyle(
-                color: Color(0xFF536348),
-                fontSize: 9,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

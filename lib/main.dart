@@ -6,6 +6,7 @@ import 'views/register/register_view.dart';
 import 'views/login/login_view.dart';
 import 'views/dashboard/dashboard_view.dart';
 import 'views/keuangan_stok/keuangan_stok_view.dart';
+import 'views/keuangan_stok/stock_form_view.dart';
 
 void main() {
   runApp(const MyApp());
@@ -29,8 +30,10 @@ class MyApp extends StatelessWidget {
         '/login': (context) => const LoginView(),
         '/dashboard': (context) => const DashboardView(),
         '/keuangan-stok': (context) => const KeuanganStokView(),
+        '/stock-form': (context) => const StockFormView(),
       },
-      home: const SplashView(),
+      // home: const SplashView(),
+      home: const DashboardView(),
     );
   }
 }
