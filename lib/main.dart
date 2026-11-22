@@ -32,8 +32,8 @@ class MyApp extends StatelessWidget {
         '/keuangan-stok': (context) => const KeuanganStokView(),
         '/stock-form': (context) => const StockFormView(),
       },
-      // home: const SplashView(),
-      home: const DashboardView(),
+      home: const SplashView(),
+      // home: const DashboardView(),
     );
   }
 }

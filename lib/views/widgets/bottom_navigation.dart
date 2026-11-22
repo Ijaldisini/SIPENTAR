@@ -12,7 +12,7 @@ class BottomNavigation extends StatelessWidget {
 
   static const Color primaryColor = Color(0xFF6E8649);
 
-  static const List<_NavigationItem> items = [
+  static const List<_NavigationItem> _items = [
     _NavigationItem(icon: Icons.home_outlined, label: 'Beranda'),
     _NavigationItem(
       icon: Icons.account_balance_wallet_outlined,
@@ -34,7 +34,7 @@ class BottomNavigation extends StatelessWidget {
       ),
       child: Row(
         children: List.generate(
-          items.length,
+          _items.length,
           (index) => Expanded(child: _buildNavigationItem(index)),
         ),
       ),
@@ -42,7 +42,7 @@ class BottomNavigation extends StatelessWidget {
   }
 
   Widget _buildNavigationItem(int index) {
-    final item = items[index];
+    final item = _items[index];
     final isSelected = currentIndex == index;
 
     return Material(

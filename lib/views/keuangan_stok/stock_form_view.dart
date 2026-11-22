@@ -340,7 +340,7 @@ class _StockFormViewState extends State<StockFormView> {
         SizedBox(
           height: 56,
           child: DropdownButtonFormField<String>(
-            value: value,
+            initialValue: value,
             isExpanded: true,
             icon: const Icon(
               Icons.keyboard_arrow_down_rounded,

@@ -430,7 +430,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
         SizedBox(
           height: 56,
           child: DropdownButtonFormField<String>(
-            value: selectedCategory,
+            initialValue: selectedCategory,
             isExpanded: true,
             icon: const Icon(
               Icons.keyboard_arrow_down_rounded,

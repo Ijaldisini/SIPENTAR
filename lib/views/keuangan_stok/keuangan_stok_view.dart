@@ -1060,39 +1060,4 @@ class _KeuanganStokViewState extends State<KeuanganStokView> {
       ),
     );
   }
-
-  Widget _buildStockCount({
-    required String value,
-    required String label,
-    required Color color,
-    required Color textValueColor,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            value,
-            style: TextStyle(
-              color: textValueColor,
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-
-          const SizedBox(height: 4),
-
-          Text(
-            label,
-            style: const TextStyle(color: Color(0xFF70786B), fontSize: 10),
-          ),
-        ],
-      ),
-    );
-  }
 }
