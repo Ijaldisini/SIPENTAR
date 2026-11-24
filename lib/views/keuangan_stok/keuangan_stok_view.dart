@@ -21,13 +21,10 @@ class _KeuanganStokViewState extends State<KeuanganStokView> {
 
   int selectedTab = 0;
 
-  // Filter stok
   int selectedStockFilter = 0;
 
-  // Pencarian stok
   String stockSearchQuery = '';
 
-  // Dummy data stok
   final List<Map<String, String>> stockItems = const [
     {
       'name': 'Nutrisi AB Mix',
@@ -52,7 +49,6 @@ class _KeuanganStokViewState extends State<KeuanganStokView> {
     },
   ];
 
-  // Data stok setelah pencarian dan filter
   List<Map<String, String>> get filteredStockItems {
     return stockItems.where((item) {
       final name = (item['name'] ?? '').toLowerCase();
@@ -69,8 +65,6 @@ class _KeuanganStokViewState extends State<KeuanganStokView> {
 
   @override
   Widget build(BuildContext context) {
-    final bottomInset = MediaQuery.paddingOf(context).bottom;
-
     return Scaffold(
       backgroundColor: primaryColor,
       body: Stack(
@@ -112,28 +106,9 @@ class _KeuanganStokViewState extends State<KeuanganStokView> {
               ),
             ),
           ),
-
-          Positioned(
-            left: 24,
-            right: 24,
-            bottom: 12 + bottomInset,
-            child: BottomNavigation(
-              currentIndex: 1,
-              onTap: (index) {
-                if (index == 0) {
-                  Navigator.pushReplacementNamed(context, '/dashboard');
-                } else if (index != 1) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Halaman ini belum tersedia.'),
-                    ),
-                  );
-                }
-              },
-            ),
-          ),
         ],
       ),
+      bottomNavigationBar: const BottomNavigation(currentIndex: 1),
     );
   }
 
@@ -255,17 +230,14 @@ class _KeuanganStokViewState extends State<KeuanganStokView> {
   Widget _buildFinanceContent() {
     return Column(
       children: [
-        // Saldo kas
         _buildBalanceCard(),
 
         const SizedBox(height: 14),
 
-        // Quick actions
         _buildQuickActions(context),
 
         const SizedBox(height: 14),
 
-        // Peringatan stok
         _buildLowStockAlert(
           onTap: () {
             setState(() {
@@ -277,7 +249,6 @@ class _KeuanganStokViewState extends State<KeuanganStokView> {
 
         const SizedBox(height: 14),
 
-        // Transaksi terbaru
         _buildRecentTransactions(),
       ],
     );
@@ -490,7 +461,6 @@ class _KeuanganStokViewState extends State<KeuanganStokView> {
     );
   }
 
-  // Low stock alert
   Widget _buildLowStockAlert({VoidCallback? onTap}) {
     return Material(
       color: Colors.transparent,
@@ -546,7 +516,6 @@ class _KeuanganStokViewState extends State<KeuanganStokView> {
     );
   }
 
-  // Recent transactions
   Widget _buildRecentTransactions() {
     return Column(
       children: [
@@ -679,35 +648,26 @@ class _KeuanganStokViewState extends State<KeuanganStokView> {
     );
   }
 
-  // =========================
-  // STOCK CONTENT
-  // =========================
-
   Widget _buildStockContent() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Search field
         _buildStockSearchField(),
 
         const SizedBox(height: 12),
 
-        // Stock warning
         _buildLowStockAlert(),
 
         const SizedBox(height: 10),
 
-        // Stock summary
         _buildStockSummary(),
 
         const SizedBox(height: 10),
 
-        // Stock filters
         _buildStockFilters(),
 
         const SizedBox(height: 12),
 
-        // Stock list
         if (filteredStockItems.isEmpty)
           Container(
             width: double.infinity,
@@ -737,7 +697,6 @@ class _KeuanganStokViewState extends State<KeuanganStokView> {
 
         const SizedBox(height: 2),
 
-        // Add stock button
         SizedBox(
           width: double.infinity,
           height: 52,
@@ -766,10 +725,6 @@ class _KeuanganStokViewState extends State<KeuanganStokView> {
       ],
     );
   }
-
-  // =========================
-  // SEARCH STOCK
-  // =========================
 
   Widget _buildStockSearchField() {
     return Container(
@@ -806,10 +761,6 @@ class _KeuanganStokViewState extends State<KeuanganStokView> {
       ),
     );
   }
-
-  // =========================
-  // STOCK SUMMARY
-  // =========================
 
   Widget _buildStockSummary() {
     final total = stockItems.length;
@@ -885,10 +836,6 @@ class _KeuanganStokViewState extends State<KeuanganStokView> {
     );
   }
 
-  // =========================
-  // STOCK FILTER
-  // =========================
-
   Widget _buildStockFilters() {
     final total = stockItems.length;
     final lowStock = stockItems
@@ -955,10 +902,6 @@ class _KeuanganStokViewState extends State<KeuanganStokView> {
     );
   }
 
-  // =========================
-  // STOCK ITEM
-  // =========================
-
   Widget _buildStockItem(BuildContext context, Map<String, String> item) {
     final isLowStock = item['status'] == 'Menipis';
 
@@ -973,7 +916,6 @@ class _KeuanganStokViewState extends State<KeuanganStokView> {
       ),
       child: Row(
         children: [
-          // Stock icon
           Container(
             width: 36,
             height: 36,
@@ -990,7 +932,6 @@ class _KeuanganStokViewState extends State<KeuanganStokView> {
 
           const SizedBox(width: 10),
 
-          // Stock information
           Expanded(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -1025,7 +966,6 @@ class _KeuanganStokViewState extends State<KeuanganStokView> {
 
           const SizedBox(width: 6),
 
-          // Stock quantity
           Text(
             item['quantity'] ?? '',
             style: TextStyle(
@@ -1037,7 +977,6 @@ class _KeuanganStokViewState extends State<KeuanganStokView> {
 
           const SizedBox(width: 8),
 
-          // Edit icon (UI only)
           IconButton(
             onPressed: () {
               Navigator.push(

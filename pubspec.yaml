@@ -37,6 +37,9 @@ dependencies:
   google_fonts: ^9.0.0
   http: ^1.6.0
   flutter_secure_storage: ^11.2.0
+  image_picker: ^1.2.4
+  camera: ^0.12.2
+  camera_android: ^0.10.13
 
 dev_dependencies:
   flutter_test:

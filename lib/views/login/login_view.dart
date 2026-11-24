@@ -27,14 +27,12 @@ class _LoginViewState extends State<LoginView> {
     _authController.addListener(_onControllerChanged);
   }
 
-  // Mendengarkan perubahan state Controller
   void _onControllerChanged() {
     if (mounted) {
       setState(() {});
     }
   }
 
-  // Mengirim data login
   Future<void> _submitLogin() async {
     final success = await _authController.login(
       username: _usernameController.text,
@@ -75,7 +73,6 @@ class _LoginViewState extends State<LoginView> {
 
           return Stack(
             children: [
-              // Background image
               Positioned(
                 top: 0,
                 left: 0,
@@ -88,7 +85,6 @@ class _LoginViewState extends State<LoginView> {
                 ),
               ),
 
-              // Gradient overlay
               Positioned(
                 top: 0,
                 left: 0,
@@ -110,7 +106,6 @@ class _LoginViewState extends State<LoginView> {
                 ),
               ),
 
-              // Header buttons
               Positioned(
                 top: MediaQuery.paddingOf(context).top + 24,
                 left: 24,
@@ -124,7 +119,6 @@ class _LoginViewState extends State<LoginView> {
                 ),
               ),
 
-              // Login heading
               Positioned(
                 top: screenHeight * 0.465,
                 left: 24,
@@ -159,7 +153,6 @@ class _LoginViewState extends State<LoginView> {
                 ),
               ),
 
-              // Login form panel
               Positioned(
                 top: panelTop,
                 left: 0,
@@ -181,7 +174,6 @@ class _LoginViewState extends State<LoginView> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Username field
                           _buildInputField(
                             label: 'Username',
                             hint: 'Masukkan username',
@@ -190,7 +182,6 @@ class _LoginViewState extends State<LoginView> {
 
                           const SizedBox(height: 16),
 
-                          // Password field
                           _buildInputField(
                             label: 'Password',
                             hint: 'Masukkan password',
@@ -198,7 +189,6 @@ class _LoginViewState extends State<LoginView> {
                             controller: _passwordController,
                           ),
 
-                          // Error message
                           if (_authController.errorMessage != null) ...[
                             const SizedBox(height: 16),
 
@@ -239,7 +229,6 @@ class _LoginViewState extends State<LoginView> {
 
                           const SizedBox(height: 20),
 
-                          // Login button
                           SizedBox(
                             width: double.infinity,
                             height: 56,
@@ -278,7 +267,6 @@ class _LoginViewState extends State<LoginView> {
 
                           const SizedBox(height: 12),
 
-                          // Register navigation
                           Center(
                             child: Wrap(
                               alignment: WrapAlignment.center,
@@ -330,7 +318,6 @@ class _LoginViewState extends State<LoginView> {
     );
   }
 
-  // Glassy header button
   Widget _buildHeaderButton(BuildContext context, String title) {
     return Material(
       color: Colors.transparent,
@@ -364,7 +351,6 @@ class _LoginViewState extends State<LoginView> {
     );
   }
 
-  // Reusable input field
   Widget _buildInputField({
     required String label,
     required String hint,

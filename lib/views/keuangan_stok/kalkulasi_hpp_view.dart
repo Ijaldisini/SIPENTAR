@@ -17,7 +17,6 @@ class _KalkulasiHppViewState extends State<KalkulasiHppView> {
     text: '1200',
   );
 
-  // Dummy biaya produksi
   final List<Map<String, dynamic>> productionCosts = const [
     {'name': 'Benih', 'amount': 600000},
     {'name': 'Nutrisi', 'amount': 1800000},
@@ -26,7 +25,6 @@ class _KalkulasiHppViewState extends State<KalkulasiHppView> {
     {'name': 'Kemasan', 'amount': 300000},
   ];
 
-  // Total biaya produksi
   int get totalProductionCost {
     return productionCosts.fold<int>(
       0,
@@ -34,7 +32,6 @@ class _KalkulasiHppViewState extends State<KalkulasiHppView> {
     );
   }
 
-  // Jumlah lubang tanam
   int get totalHoles {
     return int.tryParse(
           holeController.text.replaceAll('.', '').replaceAll(',', ''),
@@ -42,7 +39,6 @@ class _KalkulasiHppViewState extends State<KalkulasiHppView> {
         0;
   }
 
-  // HPP per lubang tanam
   int get hppPerHole {
     if (totalHoles <= 0) return 0;
 
@@ -57,13 +53,11 @@ class _KalkulasiHppViewState extends State<KalkulasiHppView> {
 
   @override
   Widget build(BuildContext context) {
-
     return Scaffold(
       backgroundColor: primaryColor,
       resizeToAvoidBottomInset: true,
       body: Stack(
         children: [
-          // Header
           Positioned(
             top: 0,
             left: 0,
@@ -72,7 +66,6 @@ class _KalkulasiHppViewState extends State<KalkulasiHppView> {
             child: _buildHeader(context),
           ),
 
-          // White content panel
           Positioned(
             top: 104,
             left: 0,
@@ -85,7 +78,6 @@ class _KalkulasiHppViewState extends State<KalkulasiHppView> {
               ),
               child: Column(
                 children: [
-                  // Scrollable content
                   Expanded(
                     child: SingleChildScrollView(
                       keyboardDismissBehavior:
@@ -125,7 +117,6 @@ class _KalkulasiHppViewState extends State<KalkulasiHppView> {
                     ),
                   ),
 
-                  // Fixed calculate button
                   _buildCalculateButton(),
                 ],
               ),
@@ -135,10 +126,6 @@ class _KalkulasiHppViewState extends State<KalkulasiHppView> {
       ),
     );
   }
-
-  // =========================
-  // HEADER
-  // =========================
 
   Widget _buildHeader(BuildContext context) {
     return Container(
@@ -178,10 +165,6 @@ class _KalkulasiHppViewState extends State<KalkulasiHppView> {
       ),
     );
   }
-
-  // =========================
-  // CYCLE SELECTOR
-  // =========================
 
   Widget _buildCycleSelector() {
     return Container(
@@ -223,10 +206,6 @@ class _KalkulasiHppViewState extends State<KalkulasiHppView> {
       ),
     );
   }
-
-  // =========================
-  // HOLE INPUT
-  // =========================
 
   Widget _buildHoleInput() {
     return Column(
@@ -274,10 +253,6 @@ class _KalkulasiHppViewState extends State<KalkulasiHppView> {
       ],
     );
   }
-
-  // =========================
-  // PRODUCTION COST CARD
-  // =========================
 
   Widget _buildProductionCostCard() {
     return Container(
@@ -372,10 +347,6 @@ class _KalkulasiHppViewState extends State<KalkulasiHppView> {
     );
   }
 
-  // =========================
-  // HPP RESULT CARD
-  // =========================
-
   Widget _buildHppResultCard() {
     return Container(
       width: double.infinity,
@@ -423,10 +394,6 @@ class _KalkulasiHppViewState extends State<KalkulasiHppView> {
     );
   }
 
-  // =========================
-  // COMMON WIDGETS
-  // =========================
-
   Widget _buildLabel(String label) {
     return Text(
       label,
@@ -448,10 +415,6 @@ class _KalkulasiHppViewState extends State<KalkulasiHppView> {
   String _formatRupiah(int value) {
     return 'Rp${_formatNumber(value)}';
   }
-
-  // =========================
-  // CALCULATE BUTTON
-  // =========================
 
   Widget _buildCalculateButton() {
     return SafeArea(

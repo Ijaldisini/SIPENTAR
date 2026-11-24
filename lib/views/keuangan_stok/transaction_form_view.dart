@@ -46,7 +46,6 @@ class _TransactionFormViewState extends State<TransactionFormView> {
     _setTransactionData();
   }
 
-  // Set dummy data berdasarkan jenis transaksi
   void _setTransactionData() {
     if (isIncome) {
       amountController.text = '1.200.000';
@@ -84,7 +83,6 @@ class _TransactionFormViewState extends State<TransactionFormView> {
       resizeToAvoidBottomInset: true,
       body: Stack(
         children: [
-          // Green header
           Positioned(
             top: 0,
             left: 0,
@@ -93,7 +91,6 @@ class _TransactionFormViewState extends State<TransactionFormView> {
             child: _buildHeader(context),
           ),
 
-          // White form panel
           Positioned(
             top: 104,
             left: 0,
@@ -106,7 +103,6 @@ class _TransactionFormViewState extends State<TransactionFormView> {
               ),
               child: Column(
                 children: [
-                  // Scrollable form
                   Expanded(
                     child: SingleChildScrollView(
                       keyboardDismissBehavior:
@@ -115,27 +111,22 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Transaction type
                           _buildTransactionSelector(),
 
                           const SizedBox(height: 16),
 
-                          // Nominal
                           _buildNominalField(),
 
                           const SizedBox(height: 16),
 
-                          // Transaction date
                           _buildDateField(),
 
                           const SizedBox(height: 16),
 
-                          // Category
                           _buildCategoryField(),
 
                           const SizedBox(height: 16),
 
-                          // Description
                           _buildDescriptionField(),
 
                           const SizedBox(height: 12),
@@ -155,7 +146,6 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                     ),
                   ),
 
-                  // Fixed bottom buttons
                   _buildBottomButtons(context),
                 ],
               ),
@@ -165,10 +155,6 @@ class _TransactionFormViewState extends State<TransactionFormView> {
       ),
     );
   }
-
-  // =========================
-  // HEADER
-  // =========================
 
   Widget _buildHeader(BuildContext context) {
     return Container(
@@ -208,10 +194,6 @@ class _TransactionFormViewState extends State<TransactionFormView> {
       ),
     );
   }
-
-  // =========================
-  // TRANSACTION SELECTOR
-  // =========================
 
   Widget _buildTransactionSelector() {
     return Container(
@@ -268,10 +250,6 @@ class _TransactionFormViewState extends State<TransactionFormView> {
     );
   }
 
-  // =========================
-  // NOMINAL FIELD
-  // =========================
-
   Widget _buildNominalField() {
     return Container(
       width: double.infinity,
@@ -316,10 +294,6 @@ class _TransactionFormViewState extends State<TransactionFormView> {
       ),
     );
   }
-
-  // =========================
-  // DATE FIELD
-  // =========================
 
   Widget _buildDateField() {
     return Column(
@@ -415,10 +389,6 @@ class _TransactionFormViewState extends State<TransactionFormView> {
     return months[month - 1];
   }
 
-  // =========================
-  // CATEGORY FIELD
-  // =========================
-
   Widget _buildCategoryField() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -457,10 +427,6 @@ class _TransactionFormViewState extends State<TransactionFormView> {
     );
   }
 
-  // =========================
-  // DESCRIPTION FIELD
-  // =========================
-
   Widget _buildDescriptionField() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -488,10 +454,6 @@ class _TransactionFormViewState extends State<TransactionFormView> {
     );
   }
 
-  // =========================
-  // COMMON WIDGETS
-  // =========================
-
   Widget _buildLabel(String label) {
     return Text(
       label,
@@ -518,10 +480,6 @@ class _TransactionFormViewState extends State<TransactionFormView> {
       ),
     );
   }
-
-  // =========================
-  // BOTTOM BUTTONS
-  // =========================
 
   Widget _buildBottomButtons(BuildContext context) {
     return SafeArea(

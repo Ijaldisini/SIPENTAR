@@ -10,8 +10,6 @@ class LaporanKeuanganView extends StatelessWidget {
   static const Color borderColor = Color(0xFFDFE5D7);
   static const Color expenseColor = Color(0xFFC8AF86);
 
-  // Dummy data grafik arus kas.
-  // Angka ini merupakan tinggi visual batang, bukan nominal transaksi.
   static const List<Map<String, dynamic>> dailyCashflow = [
     {'date': '01 Nov', 'income': 36.0, 'expense': 12.0},
     {'date': '02 Nov', 'income': 48.0, 'expense': 16.0},
@@ -26,7 +24,6 @@ class LaporanKeuanganView extends StatelessWidget {
       backgroundColor: primaryColor,
       body: Stack(
         children: [
-          // Header hijau
           Positioned(
             top: 0,
             left: 0,
@@ -35,7 +32,6 @@ class LaporanKeuanganView extends StatelessWidget {
             child: _buildHeader(context),
           ),
 
-          // Panel putih
           Positioned(
             top: 104,
             left: 0,
@@ -48,7 +44,6 @@ class LaporanKeuanganView extends StatelessWidget {
               ),
               child: Column(
                 children: [
-                  // Konten laporan dapat di-scroll
                   Expanded(
                     child: SingleChildScrollView(
                       physics: const BouncingScrollPhysics(),
@@ -56,29 +51,24 @@ class LaporanKeuanganView extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Periode laporan
                           _buildPeriodSelector(),
 
                           const SizedBox(height: 16),
 
-                          // Ringkasan surplus kas
                           _buildSurplusCard(),
 
                           const SizedBox(height: 12),
 
-                          // Grafik arus kas
                           _buildCashflowChart(),
 
                           const SizedBox(height: 16),
 
-                          // Rincian laporan
                           _buildReportDetails(),
                         ],
                       ),
                     ),
                   ),
 
-                  // Tombol PDF tetap di bawah
                   _buildDownloadButton(context),
                 ],
               ),
@@ -88,10 +78,6 @@ class LaporanKeuanganView extends StatelessWidget {
       ),
     );
   }
-
-  // =========================
-  // HEADER
-  // =========================
 
   Widget _buildHeader(BuildContext context) {
     return Container(
@@ -134,10 +120,6 @@ class LaporanKeuanganView extends StatelessWidget {
     );
   }
 
-  // =========================
-  // PERIOD SELECTOR
-  // =========================
-
   Widget _buildPeriodSelector() {
     return Container(
       width: double.infinity,
@@ -174,10 +156,6 @@ class LaporanKeuanganView extends StatelessWidget {
       ),
     );
   }
-
-  // =========================
-  // SURPLUS CARD
-  // =========================
 
   Widget _buildSurplusCard() {
     return Container(
@@ -284,10 +262,6 @@ class LaporanKeuanganView extends StatelessWidget {
     );
   }
 
-  // =========================
-  // CASHFLOW CHART
-  // =========================
-
   Widget _buildCashflowChart() {
     return Container(
       width: double.infinity,
@@ -311,7 +285,6 @@ class LaporanKeuanganView extends StatelessWidget {
 
           const SizedBox(height: 8),
 
-          // Chart legend
           Row(
             children: [
               _buildChartLegend(color: primaryColor, label: 'Pemasukan'),
@@ -324,7 +297,6 @@ class LaporanKeuanganView extends StatelessWidget {
 
           const SizedBox(height: 12),
 
-          // Bar chart
           SizedBox(
             height: 102,
             child: Row(
@@ -426,10 +398,6 @@ class LaporanKeuanganView extends StatelessWidget {
     );
   }
 
-  // =========================
-  // REPORT DETAILS
-  // =========================
-
   Widget _buildReportDetails() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -494,10 +462,6 @@ class LaporanKeuanganView extends StatelessWidget {
       ],
     );
   }
-
-  // =========================
-  // DOWNLOAD PDF BUTTON
-  // =========================
 
   Widget _buildDownloadButton(BuildContext context) {
     return SafeArea(

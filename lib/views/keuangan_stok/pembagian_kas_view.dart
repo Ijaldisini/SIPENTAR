@@ -12,13 +12,10 @@ class _PembagianKasViewState extends State<PembagianKasView> {
   static const Color softColor = Color(0xFFF1F5E9);
   static const Color textColor = Color(0xFF26351F);
 
-  // Dummy omzet penjualan
   static const int totalRevenue = 12000000;
 
-  // Persentase awal sesuai Figma
   final List<int> percentages = [40, 30, 10, 20];
 
-  // Data alokasi kas
   final List<Map<String, String>> allocations = const [
     {'title': 'Kas operasional', 'description': 'Untuk kebutuhan rutin'},
     {'title': 'Modal tanam berikutnya', 'description': 'Persiapan siklus baru'},
@@ -29,12 +26,10 @@ class _PembagianKasViewState extends State<PembagianKasView> {
     },
   ];
 
-  // Total persentase
   int get totalPercentage {
     return percentages.fold(0, (total, value) => total + value);
   }
 
-  // Total nominal pembagian
   int get totalAllocated {
     return percentages.fold(
       0,
@@ -42,12 +37,10 @@ class _PembagianKasViewState extends State<PembagianKasView> {
     );
   }
 
-  // Menghitung nominal tiap alokasi
   int getAllocationAmount(int index) {
     return totalRevenue * percentages[index] ~/ 100;
   }
 
-  // Mengatur persentase
   void _changePercentage(int index, int change) {
     setState(() {
       final newValue = percentages[index] + change;
@@ -58,7 +51,6 @@ class _PembagianKasViewState extends State<PembagianKasView> {
     });
   }
 
-  // Format rupiah
   String _formatRupiah(int value) {
     final formatted = value.toString().replaceAllMapped(
       RegExp(r'\B(?=(\d{3})+(?!\d))'),
@@ -74,7 +66,6 @@ class _PembagianKasViewState extends State<PembagianKasView> {
       backgroundColor: primaryColor,
       body: Stack(
         children: [
-          // Green header
           Positioned(
             top: 0,
             left: 0,
@@ -83,7 +74,6 @@ class _PembagianKasViewState extends State<PembagianKasView> {
             child: _buildHeader(context),
           ),
 
-          // White content panel
           Positioned(
             top: 104,
             left: 0,
@@ -96,7 +86,6 @@ class _PembagianKasViewState extends State<PembagianKasView> {
               ),
               child: Column(
                 children: [
-                  // Scrollable content
                   Expanded(
                     child: SingleChildScrollView(
                       physics: const BouncingScrollPhysics(),
@@ -104,17 +93,14 @@ class _PembagianKasViewState extends State<PembagianKasView> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Revenue card
                           _buildRevenueCard(),
 
                           const SizedBox(height: 16),
 
-                          // Section heading
                           _buildSectionHeading(),
 
                           const SizedBox(height: 12),
 
-                          // Allocation cards
                           ...List.generate(
                             allocations.length,
                             (index) => Padding(
@@ -127,12 +113,10 @@ class _PembagianKasViewState extends State<PembagianKasView> {
 
                           const SizedBox(height: 12),
 
-                          // Total allocation
                           _buildTotalCard(),
 
                           const SizedBox(height: 10),
 
-                          // Information
                           const Text(
                             'Ini adalah rencana alokasi kas, bukan '
                             'pencatatan pengeluaran baru. '
@@ -149,7 +133,6 @@ class _PembagianKasViewState extends State<PembagianKasView> {
                     ),
                   ),
 
-                  // Fixed bottom button
                   _buildBottomButton(context),
                 ],
               ),
@@ -159,10 +142,6 @@ class _PembagianKasViewState extends State<PembagianKasView> {
       ),
     );
   }
-
-  // =========================
-  // HEADER
-  // =========================
 
   Widget _buildHeader(BuildContext context) {
     return Container(
@@ -203,10 +182,6 @@ class _PembagianKasViewState extends State<PembagianKasView> {
     );
   }
 
-  // =========================
-  // REVENUE CARD
-  // =========================
-
   Widget _buildRevenueCard() {
     return Container(
       width: double.infinity,
@@ -242,10 +217,6 @@ class _PembagianKasViewState extends State<PembagianKasView> {
     );
   }
 
-  // =========================
-  // SECTION HEADING
-  // =========================
-
   Widget _buildSectionHeading() {
     return const Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -273,10 +244,6 @@ class _PembagianKasViewState extends State<PembagianKasView> {
     );
   }
 
-  // =========================
-  // ALLOCATION CARD
-  // =========================
-
   Widget _buildAllocationCard(int index) {
     final item = allocations[index];
     final percentage = percentages[index];
@@ -293,7 +260,6 @@ class _PembagianKasViewState extends State<PembagianKasView> {
       ),
       child: Row(
         children: [
-          // Allocation information
           Expanded(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -328,7 +294,6 @@ class _PembagianKasViewState extends State<PembagianKasView> {
 
           const SizedBox(width: 6),
 
-          // Percentage controller and nominal
           SizedBox(
             width: 112,
             child: Column(
@@ -394,10 +359,6 @@ class _PembagianKasViewState extends State<PembagianKasView> {
     );
   }
 
-  // =========================
-  // PERCENTAGE BUTTON
-  // =========================
-
   Widget _buildPercentageButton({
     required IconData icon,
     required VoidCallback onTap,
@@ -416,10 +377,6 @@ class _PembagianKasViewState extends State<PembagianKasView> {
       ),
     );
   }
-
-  // =========================
-  // TOTAL CARD
-  // =========================
 
   Widget _buildTotalCard() {
     final isValid = totalPercentage == 100;
@@ -467,10 +424,6 @@ class _PembagianKasViewState extends State<PembagianKasView> {
       ),
     );
   }
-
-  // =========================
-  // SAVE BUTTON
-  // =========================
 
   Widget _buildBottomButton(BuildContext context) {
     return SafeArea(

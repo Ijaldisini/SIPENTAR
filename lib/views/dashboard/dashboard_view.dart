@@ -11,13 +11,10 @@ class DashboardView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bottomInset = MediaQuery.paddingOf(context).bottom;
-
     return Scaffold(
       backgroundColor: primaryColor,
       body: Stack(
         children: [
-          // Header dashboard
           Positioned(
             top: 0,
             left: 0,
@@ -26,7 +23,6 @@ class DashboardView extends StatelessWidget {
             child: _buildHeader(context),
           ),
 
-          // White content panel with scroll
           Positioned(
             top: 136,
             left: 0,
@@ -60,33 +56,12 @@ class DashboardView extends StatelessWidget {
               ),
             ),
           ),
-
-          // Fixed bottom navigation
-          Positioned(
-            left: 24,
-            right: 24,
-            bottom: 12 + bottomInset,
-            child: BottomNavigation(
-              currentIndex: 0,
-              onTap: (index) {
-                if (index == 1) {
-                  Navigator.pushReplacementNamed(context, '/keuangan-stok');
-                } else if (index != 0) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Halaman ini belum tersedia.'),
-                    ),
-                  );
-                }
-              },
-            ),
-          ),
         ],
       ),
+      bottomNavigationBar: const BottomNavigation(currentIndex: 0),
     );
   }
 
-  // Dashboard header
   Widget _buildHeader(BuildContext context) {
     return Container(
       color: primaryColor,
@@ -127,7 +102,6 @@ class DashboardView extends StatelessWidget {
             ),
           ),
 
-          // Notification icon
           Stack(
             children: [
               const SizedBox(
@@ -159,7 +133,6 @@ class DashboardView extends StatelessWidget {
     );
   }
 
-  // Reusable dashboard card container
   Widget _buildCard({required Widget child}) {
     return Container(
       width: double.infinity,
@@ -179,7 +152,6 @@ class DashboardView extends StatelessWidget {
     );
   }
 
-  // Reusable card header
   Widget _buildCardHeader({
     required String title,
     required String subtitle,
@@ -227,7 +199,6 @@ class DashboardView extends StatelessWidget {
     );
   }
 
-  // Reusable card footer
   Widget _buildCardFooter(String title) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -246,7 +217,6 @@ class DashboardView extends StatelessWidget {
     );
   }
 
-  // Cultivation card
   Widget _buildCultivationCard() {
     return _buildCard(
       child: Column(
@@ -282,7 +252,6 @@ class DashboardView extends StatelessWidget {
     );
   }
 
-  // Reusable information box
   Widget _buildInfoBox({required String label, required String value}) {
     return Container(
       padding: const EdgeInsets.all(12),
@@ -317,7 +286,6 @@ class DashboardView extends StatelessWidget {
     );
   }
 
-  // Finance card
   Widget _buildFinanceCard() {
     return _buildCard(
       child: Column(
@@ -368,7 +336,6 @@ class DashboardView extends StatelessWidget {
     );
   }
 
-  // Stock management card
   Widget _buildStockCard() {
     return _buildCard(
       child: Column(
@@ -425,7 +392,6 @@ class DashboardView extends StatelessWidget {
     );
   }
 
-  // Reusable stock information
   Widget _buildStockInfo({
     required String value,
     required String label,
@@ -466,7 +432,6 @@ class DashboardView extends StatelessWidget {
     );
   }
 
-  // Lettuce health card
   Widget _buildHealthCard() {
     return _buildCard(
       child: Column(
@@ -510,7 +475,6 @@ class DashboardView extends StatelessWidget {
     );
   }
 
-  // Reusable health information
   Widget _buildHealthInfo({
     required String label,
     required String value,

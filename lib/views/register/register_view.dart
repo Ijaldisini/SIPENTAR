@@ -141,14 +141,11 @@ class RegisterView extends StatelessWidget {
 
                           const SizedBox(height: 20),
 
-                          // Register button
                           SizedBox(
                             width: double.infinity,
                             height: 56,
                             child: ElevatedButton(
-                              onPressed: () {
-                                // Fungsi register akan ditambahkan nanti.
-                              },
+                              onPressed: () {},
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: primaryColor,
                                 foregroundColor: Colors.white,

@@ -111,7 +111,6 @@ class _StockFormViewState extends State<StockFormView> {
       resizeToAvoidBottomInset: true,
       body: Stack(
         children: [
-          // Green header
           Positioned(
             top: 0,
             left: 0,
@@ -120,7 +119,6 @@ class _StockFormViewState extends State<StockFormView> {
             child: _buildHeader(context),
           ),
 
-          // White form panel
           Positioned(
             top: 104,
             left: 0,
@@ -133,7 +131,6 @@ class _StockFormViewState extends State<StockFormView> {
               ),
               child: Column(
                 children: [
-                  // Scrollable form
                   Expanded(
                     child: SingleChildScrollView(
                       keyboardDismissBehavior:
@@ -142,7 +139,6 @@ class _StockFormViewState extends State<StockFormView> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Stock name
                           _buildTextField(
                             label: 'Nama stok',
                             controller: nameController,
@@ -150,7 +146,6 @@ class _StockFormViewState extends State<StockFormView> {
 
                           const SizedBox(height: 16),
 
-                          // Category
                           _buildDropdownField(
                             label: 'Kategori',
                             value: selectedCategory,
@@ -166,7 +161,6 @@ class _StockFormViewState extends State<StockFormView> {
 
                           const SizedBox(height: 16),
 
-                          // Quantity and unit
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -203,7 +197,6 @@ class _StockFormViewState extends State<StockFormView> {
 
                           const SizedBox(height: 16),
 
-                          // Minimum stock
                           _buildTextField(
                             label: 'Batas minimum stok',
                             controller: minimumController,
@@ -215,19 +208,16 @@ class _StockFormViewState extends State<StockFormView> {
 
                           const SizedBox(height: 16),
 
-                          // Notes
                           _buildNotesField(),
 
                           const SizedBox(height: 16),
 
-                          // Stock notification
                           _buildStockNotice(),
                         ],
                       ),
                     ),
                   ),
 
-                  // Fixed bottom buttons
                   _buildBottomButtons(context),
                 ],
               ),
@@ -237,10 +227,6 @@ class _StockFormViewState extends State<StockFormView> {
       ),
     );
   }
-
-  // =========================
-  // HEADER
-  // =========================
 
   Widget _buildHeader(BuildContext context) {
     return Container(
@@ -283,10 +269,6 @@ class _StockFormViewState extends State<StockFormView> {
     );
   }
 
-  // =========================
-  // TEXT FIELD
-  // =========================
-
   Widget _buildTextField({
     required String label,
     required TextEditingController controller,
@@ -319,10 +301,6 @@ class _StockFormViewState extends State<StockFormView> {
       ],
     );
   }
-
-  // =========================
-  // DROPDOWN FIELD
-  // =========================
 
   Widget _buildDropdownField({
     required String label,
@@ -363,10 +341,6 @@ class _StockFormViewState extends State<StockFormView> {
     );
   }
 
-  // =========================
-  // NOTES FIELD
-  // =========================
-
   Widget _buildNotesField() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -395,10 +369,6 @@ class _StockFormViewState extends State<StockFormView> {
     );
   }
 
-  // =========================
-  // FIELD LABEL
-  // =========================
-
   Widget _buildLabel(String label) {
     return Text(
       label,
@@ -409,10 +379,6 @@ class _StockFormViewState extends State<StockFormView> {
       ),
     );
   }
-
-  // =========================
-  // INPUT DECORATION
-  // =========================
 
   InputDecoration _inputDecoration() {
     return InputDecoration(
@@ -433,10 +399,6 @@ class _StockFormViewState extends State<StockFormView> {
       ),
     );
   }
-
-  // =========================
-  // STOCK NOTICE
-  // =========================
 
   Widget _buildStockNotice() {
     final isLow = isBelowMinimum;
@@ -507,10 +469,6 @@ class _StockFormViewState extends State<StockFormView> {
       ),
     );
   }
-
-  // =========================
-  // BOTTOM BUTTONS
-  // =========================
 
   Widget _buildBottomButtons(BuildContext context) {
     return SafeArea(
