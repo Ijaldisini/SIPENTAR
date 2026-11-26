@@ -1,10 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../controllers/akun/karyawan_controller.dart';
+
 class AkunKaryawanEditView extends StatefulWidget {
-  const AkunKaryawanEditView({super.key, required this.employee});
+  const AkunKaryawanEditView({
+    super.key,
+    required this.employee,
+    required this.controller,
+  });
 
   final Map<String, String> employee;
+  final KaryawanController controller;
 
   @override
   State<AkunKaryawanEditView> createState() => _AkunKaryawanEditViewState();
@@ -42,7 +49,11 @@ class _AkunKaryawanEditViewState extends State<AkunKaryawanEditView> {
       text: widget.employee['username'] ?? '',
     );
 
-    _status = widget.employee['status'] ?? 'Aktif';
+    final employeeStatus = widget.employee['status'];
+
+    _status = employeeStatus == 'Aktif' || employeeStatus == 'Nonaktif'
+        ? employeeStatus!
+        : 'Aktif';
   }
 
   @override
@@ -132,7 +143,7 @@ class _AkunKaryawanEditViewState extends State<AkunKaryawanEditView> {
       children: [
         _fieldLabel('Status akun'),
         DropdownButtonFormField<String>(
-          initialValue: _status,
+          initialValue: _status == 'Nonaktif' ? 'Nonaktif' : 'Aktif',
           decoration: _inputDecoration(),
           icon: const Icon(
             Icons.keyboard_arrow_down_rounded,
@@ -183,14 +194,47 @@ class _AkunKaryawanEditViewState extends State<AkunKaryawanEditView> {
     );
   }
 
-  void _saveAccount() {
+  Future<void> _saveAccount() async {
     if (!_formKey.currentState!.validate()) return;
+
+    final employeeId = int.tryParse(widget.employee['id'] ?? '');
+
+    if (employeeId == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('ID karyawan tidak valid.')));
+      return;
+    }
+
+    final updatedUser = await widget.controller.updateEmployee(
+      id: employeeId,
+      nama: _nameController.text.trim(),
+      username: _usernameController.text.trim(),
+      password: _passwordController.text.isEmpty
+          ? null
+          : _passwordController.text,
+    );
+
+    if (!mounted) return;
+
+    if (updatedUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            widget.controller.errorMessage ?? 'Gagal memperbarui karyawan.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
 
     final updatedEmployee = <String, String>{
       ...widget.employee,
-      'name': _nameController.text.trim(),
-      'username': _usernameController.text.trim(),
-      'status': _status,
+      'id': updatedUser.id.toString(),
+      'name': updatedUser.nama,
+      'username': updatedUser.username,
+      'role': updatedUser.role,
     };
 
     Navigator.pop(context, updatedEmployee);
@@ -240,7 +284,8 @@ class _AkunKaryawanEditViewState extends State<AkunKaryawanEditView> {
 
   Widget _buildBottomButton({
     required String label,
-    required VoidCallback onPressed,
+    required VoidCallback? onPressed,
+    bool isLoading = false,
     required bool isPrimary,
   }) {
     return Expanded(
@@ -257,13 +302,22 @@ class _AkunKaryawanEditViewState extends State<AkunKaryawanEditView> {
                     borderRadius: BorderRadius.circular(13),
                   ),
                 ),
-                child: Text(
-                  label,
-                  style: GoogleFonts.inter(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
+                child: isLoading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Text(
+                        label,
+                        style: GoogleFonts.inter(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
               )
             : OutlinedButton(
                 onPressed: onPressed,
@@ -456,13 +510,18 @@ class _AkunKaryawanEditViewState extends State<AkunKaryawanEditView> {
                         _buildBottomButton(
                           label: 'Batal',
                           isPrimary: false,
-                          onPressed: () => Navigator.pop(context),
+                          onPressed: widget.controller.isSubmitting
+                              ? null
+                              : () => Navigator.pop(context),
                         ),
                         const SizedBox(width: 10),
                         _buildBottomButton(
                           label: 'Simpan',
                           isPrimary: true,
-                          onPressed: _saveAccount,
+                          isLoading: widget.controller.isSubmitting,
+                          onPressed: widget.controller.isSubmitting
+                              ? null
+                              : _saveAccount,
                         ),
                       ],
                     ),

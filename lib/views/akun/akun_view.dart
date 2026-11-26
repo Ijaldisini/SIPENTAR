@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../controllers/auth/auth_controller.dart';
+import '../../controllers/akun/karyawan_controller.dart';
 import '../widgets/bottom_navigation.dart';
 import 'akun_karyawan_tambah_view.dart';
 import 'akun_karyawan_detail_view.dart';
@@ -14,6 +16,82 @@ class AkunView extends StatefulWidget {
 }
 
 class _AkunViewState extends State<AkunView> {
+  @override
+  void initState() {
+    super.initState();
+
+    _authController = AuthController();
+    _authController.addListener(_onAuthChanged);
+
+    _karyawanController = KaryawanController();
+    _karyawanController.addListener(_onKaryawanChanged);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      _loadUserProfile();
+    });
+  }
+
+  void _onAuthChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  Future<void> _loadUserProfile() async {
+    if (!mounted) return;
+
+    setState(() {
+      _isLoadingProfile = true;
+      _profileError = null;
+    });
+
+    final status = await _authController.restoreSession();
+
+    if (!mounted) return;
+
+    if (_isOwner) {
+      await _karyawanController.loadEmployees();
+    }
+
+    if (!mounted) return;
+
+    switch (status) {
+      case SessionRestoreStatus.authenticated:
+        setState(() {
+          _isLoadingProfile = false;
+          _profileError = null;
+        });
+        break;
+
+      case SessionRestoreStatus.unauthenticated:
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          '/welcome',
+          (route) => false,
+        );
+        break;
+
+      case SessionRestoreStatus.unavailable:
+        setState(() {
+          _isLoadingProfile = false;
+          _profileError = _authController.errorMessage;
+        });
+        break;
+    }
+  }
+
+  @override
+  void dispose() {
+    _authController.removeListener(_onAuthChanged);
+    _authController.dispose();
+    _karyawanController.removeListener(_onKaryawanChanged);
+    _karyawanController.dispose();
+
+    super.dispose();
+  }
+
   static const Color primaryColor = Color(0xFF6E8649);
   static const Color darkColor = Color(0xFF26351F);
   static const Color mutedColor = Color(0xFF70786B);
@@ -21,18 +99,46 @@ class _AkunViewState extends State<AkunView> {
   static const Color borderColor = Color(0xFFD5DECB);
   static const Color dangerColor = Color(0xFFAB3D32);
 
-  final Map<String, String> owner = {
-    'name': 'Budi Santoso',
-    'username': 'budi.santoso',
-    'role': 'Pemilik',
-    'status': 'Aktif',
-  };
+  late final AuthController _authController;
 
-  final List<Map<String, String>> employees = [
-    {'name': 'Rina Maulida', 'username': 'rina.maulida', 'status': 'Aktif'},
-    {'name': 'Andi Pratama', 'username': 'andi.pratama', 'status': 'Aktif'},
-    {'name': 'Lestari Wati', 'username': 'lestari.wati', 'status': 'Aktif'},
-  ];
+  late final KaryawanController _karyawanController;
+
+  void _onKaryawanChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  bool _isLoadingProfile = true;
+  String? _profileError;
+
+  bool _isLoggingOut = false;
+
+  Map<String, String> get owner {
+    final user = _authController.user;
+
+    String roleLabel;
+
+    switch (user?.role) {
+      case 'pemilik':
+        roleLabel = 'Pemilik';
+        break;
+      case 'pegawai':
+        roleLabel = 'Pegawai';
+        break;
+      default:
+        roleLabel = '-';
+    }
+
+    return {
+      'name': user?.nama ?? (_isLoadingProfile ? 'Memuat profil...' : '-'),
+      'username': user?.username ?? '-',
+      'role': roleLabel,
+      'status': user != null ? 'Login' : '-',
+    };
+  }
+
+  bool get _isOwner => _authController.user?.role == 'pemilik';
 
   void _showMessage(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -41,25 +147,6 @@ class _AkunViewState extends State<AkunView> {
         behavior: SnackBarBehavior.floating,
       ),
     );
-  }
-
-  void _handleNavigation(int index) {
-    switch (index) {
-      case 0:
-        Navigator.pushNamed(context, '/dashboard');
-        break;
-      case 1:
-        Navigator.pushNamed(context, '/keuangan-stok');
-        break;
-      case 2:
-        Navigator.pushNamed(context, '/budidaya');
-        break;
-      case 3:
-        Navigator.pushNamed(context, '/kesehatan');
-        break;
-      case 4:
-        break;
-    }
   }
 
   Future<void> _confirmLogout() async {
@@ -113,7 +200,28 @@ class _AkunViewState extends State<AkunView> {
     if (!mounted) return;
 
     if (result == true) {
-      _showMessage('Fitur logout akan dihubungkan dengan autentikasi.');
+      setState(() {
+        _isLoggingOut = true;
+      });
+
+      final messenger = ScaffoldMessenger.of(context);
+
+      final success = await _authController.logout();
+
+      if (!mounted) return;
+
+      final errorMessage = _authController.errorMessage;
+
+      Navigator.pushNamedAndRemoveUntil(context, '/welcome', (route) => false);
+
+      if (!success && errorMessage != null) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
   }
 
@@ -139,24 +247,26 @@ class _AkunViewState extends State<AkunView> {
                   children: [
                     _buildPersonalAccount(),
 
-                    const SizedBox(height: 22),
+                    if (_profileError != null) ...[
+                      const SizedBox(height: 12),
+                      _buildProfileError(),
+                    ],
 
-                    _buildEmployeeHeader(),
+                    if (_isOwner) ...[
+                      const SizedBox(height: 22),
 
-                    const SizedBox(height: 12),
+                      _buildEmployeeHeader(),
 
-                    _buildAddEmployeeButton(),
+                      const SizedBox(height: 12),
 
-                    const SizedBox(height: 12),
+                      _buildAddEmployeeButton(),
 
-                    ...employees.map(
-                      (employee) => Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: _buildEmployeeItem(employee),
-                      ),
-                    ),
+                      const SizedBox(height: 12),
 
-                    const SizedBox(height: 4),
+                      _buildEmployeeContent(),
+                    ],
+
+                    const SizedBox(height: 16),
 
                     _buildLogoutButton(),
                   ],
@@ -267,9 +377,9 @@ class _AkunViewState extends State<AkunView> {
                 ),
               );
 
-              if (mounted) {
-                setState(() {});
-              }
+              if (!mounted) return;
+
+              await _loadUserProfile();
             },
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
@@ -367,19 +477,16 @@ class _AkunViewState extends State<AkunView> {
       height: 44,
       child: ElevatedButton.icon(
         onPressed: () async {
-          final newEmployee = await Navigator.push<Map<String, String>>(
+          final created = await Navigator.push<bool>(
             context,
             MaterialPageRoute(
-              builder: (context) => const AkunKaryawanTambahView(),
+              builder: (context) =>
+                  AkunKaryawanTambahView(controller: _karyawanController),
             ),
           );
 
-          if (newEmployee != null && mounted) {
-            setState(() {
-              employees.add(newEmployee);
-            });
-
-            _showMessage('${newEmployee['name']} berhasil ditambahkan.');
+          if (created == true && mounted) {
+            _showMessage('Karyawan berhasil ditambahkan.');
           }
         },
         icon: const Icon(Icons.add_rounded, color: Colors.white, size: 19),
@@ -412,7 +519,10 @@ class _AkunViewState extends State<AkunView> {
           await Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => AkunKaryawanDetailView(employee: employee),
+              builder: (context) => AkunKaryawanDetailView(
+                employee: employee,
+                controller: _karyawanController,
+              ),
             ),
           );
 
@@ -445,7 +555,7 @@ class _AkunViewState extends State<AkunView> {
                     const SizedBox(height: 3),
 
                     Text(
-                      '${employee['username']}, ${employee['status']}',
+                      employee['username'] ?? '-',
                       style: GoogleFonts.inter(
                         color: mutedColor,
                         fontSize: 10,
@@ -473,8 +583,17 @@ class _AkunViewState extends State<AkunView> {
       width: double.infinity,
       height: 44,
       child: OutlinedButton.icon(
-        onPressed: _confirmLogout,
-        icon: const Icon(Icons.logout_rounded, color: dangerColor, size: 16),
+        onPressed: _isLoggingOut ? null : _confirmLogout,
+        icon: _isLoggingOut
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: dangerColor,
+                ),
+              )
+            : const Icon(Icons.logout_rounded, color: dangerColor, size: 16),
         label: Text(
           'Logout',
           style: GoogleFonts.inter(
@@ -490,6 +609,169 @@ class _AkunViewState extends State<AkunView> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildProfileError() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF5DF),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _profileError ?? 'Gagal mengambil profil.',
+            style: GoogleFonts.inter(
+              color: const Color(0xFF8C5B16),
+              fontSize: 12,
+            ),
+          ),
+
+          TextButton(
+            onPressed: _isLoadingProfile ? null : _loadUserProfile,
+            child: const Text('Coba lagi'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmployeeContent() {
+    if (_karyawanController.isLoading &&
+        _karyawanController.employees.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: CircularProgressIndicator(color: primaryColor),
+        ),
+      );
+    }
+
+    if (_karyawanController.errorMessage != null &&
+        _karyawanController.employees.isEmpty) {
+      return Column(
+        children: [
+          Text(
+            _karyawanController.errorMessage!,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.inter(color: mutedColor, fontSize: 12),
+          ),
+          const SizedBox(height: 8),
+          TextButton(
+            onPressed: _karyawanController.loadEmployees,
+            child: Text(
+              'Coba lagi',
+              style: GoogleFonts.inter(
+                color: primaryColor,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    if (_karyawanController.employees.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        child: Center(
+          child: Text(
+            'Belum ada akun karyawan.',
+            style: GoogleFonts.inter(color: mutedColor, fontSize: 12),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Text(
+            '${_karyawanController.employees.length} dari '
+            '${_karyawanController.totalEmployees} karyawan ditampilkan',
+            style: GoogleFonts.inter(color: mutedColor, fontSize: 11),
+          ),
+        ),
+
+        ..._karyawanController.employees.map((user) {
+          final employee = <String, String>{
+            'id': user.id.toString(),
+            'name': user.nama,
+            'username': user.username,
+            'role': user.role,
+            'status': '-',
+          };
+
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: _buildEmployeeItem(employee),
+          );
+        }),
+
+        if (_karyawanController.loadMoreErrorMessage != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            _karyawanController.loadMoreErrorMessage!,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.inter(color: Colors.redAccent, fontSize: 11),
+          ),
+          TextButton(
+            onPressed: _karyawanController.isLoadingMore
+                ? null
+                : _karyawanController.loadMoreEmployees,
+            child: const Text('Coba muat lagi'),
+          ),
+        ],
+
+        if (_karyawanController.isLoadingMore)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 18),
+            child: Center(
+              child: CircularProgressIndicator(
+                color: primaryColor,
+                strokeWidth: 2,
+              ),
+            ),
+          )
+        else if (_karyawanController.hasMoreEmployees)
+          SizedBox(
+            height: 44,
+            child: OutlinedButton.icon(
+              onPressed: _karyawanController.loadMoreEmployees,
+              icon: const Icon(Icons.expand_more_rounded, size: 19),
+              label: Text(
+                'Muat lainnya',
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: primaryColor,
+                side: const BorderSide(color: primaryColor),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          )
+        else
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            child: Center(
+              child: Text(
+                'Semua karyawan sudah ditampilkan.',
+                style: GoogleFonts.inter(color: mutedColor, fontSize: 11),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

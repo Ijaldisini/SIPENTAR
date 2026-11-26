@@ -1,25 +1,81 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../controllers/akun/karyawan_controller.dart';
 import 'akun_karyawan_edit_view.dart';
 
 class AkunKaryawanDetailView extends StatefulWidget {
-  const AkunKaryawanDetailView({super.key, required this.employee});
+  const AkunKaryawanDetailView({
+    super.key,
+    required this.employee,
+    required this.controller,
+  });
 
   final Map<String, String> employee;
+  final KaryawanController controller;
 
   @override
   State<AkunKaryawanDetailView> createState() => _AkunKaryawanDetailViewState();
 }
 
 class _AkunKaryawanDetailViewState extends State<AkunKaryawanDetailView> {
-  Map<String, String> get employee => widget.employee;
-
   static const Color primaryColor = Color(0xFF6E8649);
   static const Color darkColor = Color(0xFF26351F);
   static const Color mutedColor = Color(0xFF70786B);
   static const Color softColor = Color(0xFFF1F5E9);
   static const Color borderColor = Color(0xFFD5DECB);
+
+  Map<String, String> get employee {
+    final user = widget.controller.selectedEmployee;
+
+    if (user == null || user.id.toString() != widget.employee['id']) {
+      return widget.employee;
+    }
+
+    return {
+      ...widget.employee,
+      'id': user.id.toString(),
+      'name': user.nama,
+      'username': user.username,
+      'role': user.role,
+      'status': '-',
+    };
+  }
+
+  @override
+  void initState() {
+    super.initState();
+
+    widget.controller.addListener(_onControllerChanged);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      _loadEmployeeDetail();
+    });
+  }
+
+  void _onControllerChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  Future<void> _loadEmployeeDetail() async {
+    final id = int.tryParse(widget.employee['id'] ?? '');
+
+    if (id == null) {
+      return;
+    }
+
+    await widget.controller.loadEmployeeDetail(id: id);
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onControllerChanged);
+    super.dispose();
+  }
 
   Widget _buildInformationRow({
     required String label,
@@ -111,11 +167,82 @@ class _AkunKaryawanDetailViewState extends State<AkunKaryawanDetailView> {
     );
   }
 
+  Widget _buildDetailState() {
+    if (widget.controller.isDetailLoading) {
+      return const Padding(
+        padding: EdgeInsets.only(bottom: 16),
+        child: LinearProgressIndicator(
+          color: primaryColor,
+          backgroundColor: softColor,
+        ),
+      );
+    }
+
+    if (widget.controller.detailErrorMessage != null) {
+      return Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF5DF),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.controller.detailErrorMessage!,
+              style: GoogleFonts.inter(
+                color: const Color(0xFF8C5B16),
+                fontSize: 12,
+              ),
+            ),
+            const SizedBox(height: 6),
+            TextButton(
+              onPressed: _loadEmployeeDetail,
+              child: Text(
+                'Coba lagi',
+                style: GoogleFonts.inter(
+                  color: primaryColor,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return const SizedBox.shrink();
+  }
+
+  Future<void> _openEditPage() async {
+    final updatedEmployee = await Navigator.push<Map<String, String>>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AkunKaryawanEditView(
+          employee: employee,
+          controller: widget.controller,
+        ),
+      ),
+    );
+
+    if (!mounted || updatedEmployee == null) {
+      return;
+    }
+
+    setState(() {
+      widget.employee
+        ..clear()
+        ..addAll(updatedEmployee);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final name = employee['name'] ?? '-';
     final username = employee['username'] ?? '-';
-    final status = employee['status'] ?? 'Aktif';
+    final status = employee['status'] ?? '-';
 
     return Scaffold(
       backgroundColor: primaryColor,
@@ -134,6 +261,8 @@ class _AkunKaryawanDetailViewState extends State<AkunKaryawanDetailView> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      _buildDetailState(),
+
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.all(16),
@@ -269,7 +398,7 @@ class _AkunKaryawanDetailViewState extends State<AkunKaryawanDetailView> {
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    'Untuk mengubah data, hak akses, atau kata sandi karyawan, pilih Edit akun.',
+                                    'Untuk mengubah data atau kata sandi karyawan, pilih Edit akun.',
                                     style: GoogleFonts.inter(
                                       color: mutedColor,
                                       fontSize: 10,
@@ -338,25 +467,9 @@ class _AkunKaryawanDetailViewState extends State<AkunKaryawanDetailView> {
                         _buildBottomButton(
                           label: 'Edit akun',
                           isPrimary: true,
-                          onPressed: () async {
-                            final updatedEmployee =
-                                await Navigator.push<Map<String, String>>(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => AkunKaryawanEditView(
-                                      employee: employee,
-                                    ),
-                                  ),
-                                );
-
-                            if (updatedEmployee != null && mounted) {
-                              setState(() {
-                                employee
-                                  ..clear()
-                                  ..addAll(updatedEmployee);
-                              });
-                            }
-                          },
+                          onPressed: widget.controller.isSubmitting
+                              ? () {}
+                              : _openEditPage,
                         ),
                       ],
                     ),

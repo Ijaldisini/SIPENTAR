@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../controllers/akun/profil_controller.dart';
+
 class AkunPribadiEditView extends StatefulWidget {
   const AkunPribadiEditView({super.key, required this.owner});
 
@@ -11,6 +13,13 @@ class AkunPribadiEditView extends StatefulWidget {
 }
 
 class _AkunPribadiEditViewState extends State<AkunPribadiEditView> {
+  late final ProfilController _profilController;
+  void _onProfilStateChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
   static const Color primaryColor = Color(0xFF6E8649);
   static const Color darkColor = Color(0xFF26351F);
   static const Color mutedColor = Color(0xFF70786B);
@@ -32,6 +41,9 @@ class _AkunPribadiEditViewState extends State<AkunPribadiEditView> {
 
   @override
   void initState() {
+    _profilController = ProfilController();
+    _profilController.addListener(_onProfilStateChanged);
+
     super.initState();
 
     _nameController = TextEditingController(
@@ -50,12 +62,13 @@ class _AkunPribadiEditViewState extends State<AkunPribadiEditView> {
     _currentPasswordController.dispose();
     _newPasswordController.dispose();
     _confirmPasswordController.dispose();
+    _profilController.removeListener(_onProfilStateChanged);
+    _profilController.dispose();
     super.dispose();
   }
 
   bool get _isChangingPassword {
-    return _currentPasswordController.text.isNotEmpty ||
-        _newPasswordController.text.isNotEmpty ||
+    return _newPasswordController.text.isNotEmpty ||
         _confirmPasswordController.text.isNotEmpty;
   }
 
@@ -151,7 +164,7 @@ class _AkunPribadiEditViewState extends State<AkunPribadiEditView> {
       controller: controller,
       hint: hint,
       obscureText: obscureText,
-      validator: validator,
+      validator: (_) => null,
       suffixIcon: IconButton(
         onPressed: onToggle,
         icon: Icon(
@@ -225,7 +238,8 @@ class _AkunPribadiEditViewState extends State<AkunPribadiEditView> {
 
   Widget _buildBottomButton({
     required String label,
-    required VoidCallback onPressed,
+    required VoidCallback? onPressed,
+    bool isLoading = false,
     required bool isPrimary,
   }) {
     return Expanded(
@@ -242,13 +256,22 @@ class _AkunPribadiEditViewState extends State<AkunPribadiEditView> {
                     borderRadius: BorderRadius.circular(13),
                   ),
                 ),
-                child: Text(
-                  label,
-                  style: GoogleFonts.inter(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
+                child: isLoading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Text(
+                        label,
+                        style: GoogleFonts.inter(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
               )
             : OutlinedButton(
                 onPressed: onPressed,
@@ -271,14 +294,37 @@ class _AkunPribadiEditViewState extends State<AkunPribadiEditView> {
     );
   }
 
-  void _saveProfile() {
+  Future<void> _saveProfile() async {
     if (!_formKey.currentState!.validate()) return;
+
+    final updatedUser = await _profilController.updateProfile(
+      nama: _nameController.text.trim(),
+      username: _usernameController.text.trim(),
+      password: _newPasswordController.text.isEmpty
+          ? null
+          : _newPasswordController.text,
+    );
+
+    if (!mounted) return;
+
+    if (updatedUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _profilController.errorMessage ?? 'Gagal memperbarui profil.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+
+      return;
+    }
 
     final updatedOwner = <String, String>{
       ...widget.owner,
-      'name': _nameController.text.trim(),
-      'username': _usernameController.text.trim(),
-      'role': 'Pemilik',
+      'name': updatedUser.nama,
+      'username': updatedUser.username,
+      'role': updatedUser.role == 'pemilik' ? 'Pemilik' : 'Pegawai',
     };
 
     Navigator.pop(context, updatedOwner);
@@ -471,13 +517,18 @@ class _AkunPribadiEditViewState extends State<AkunPribadiEditView> {
                         _buildBottomButton(
                           label: 'Batal',
                           isPrimary: false,
-                          onPressed: () => Navigator.pop(context),
+                          onPressed: _profilController.isLoading
+                              ? null
+                              : () => Navigator.pop(context),
                         ),
                         const SizedBox(width: 10),
                         _buildBottomButton(
                           label: 'Simpan',
                           isPrimary: true,
-                          onPressed: _saveProfile,
+                          isLoading: _profilController.isLoading,
+                          onPressed: _profilController.isLoading
+                              ? null
+                              : _saveProfile,
                         ),
                       ],
                     ),

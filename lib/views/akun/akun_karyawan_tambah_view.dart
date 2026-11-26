@@ -1,14 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../controllers/akun/karyawan_controller.dart';
+
 class AkunKaryawanTambahView extends StatefulWidget {
-  const AkunKaryawanTambahView({super.key});
+  const AkunKaryawanTambahView({super.key, required this.controller});
+
+  final KaryawanController controller;
 
   @override
   State<AkunKaryawanTambahView> createState() => _AkunKaryawanTambahViewState();
 }
 
 class _AkunKaryawanTambahViewState extends State<AkunKaryawanTambahView> {
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_onControllerChanged);
+  }
+
+  void _onControllerChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
   static const Color primaryColor = Color(0xFF6E8649);
   static const Color darkColor = Color(0xFF26351F);
   static const Color mutedColor = Color(0xFF70786B);
@@ -31,18 +47,34 @@ class _AkunKaryawanTambahViewState extends State<AkunKaryawanTambahView> {
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
+    widget.controller.removeListener(_onControllerChanged);
   }
 
-  void _saveAccount() {
+  Future<void> _saveAccount() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final newEmployee = <String, String>{
-      'name': _nameController.text.trim(),
-      'username': _usernameController.text.trim(),
-      'status': 'Aktif',
-    };
+    final employee = await widget.controller.createEmployee(
+      nama: _nameController.text.trim(),
+      username: _usernameController.text.trim(),
+      password: _passwordController.text,
+    );
 
-    Navigator.pop(context, newEmployee);
+    if (!mounted) return;
+
+    if (employee == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            widget.controller.errorMessage ?? 'Gagal menambahkan karyawan.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+
+      return;
+    }
+
+    Navigator.pop(context, true);
   }
 
   InputDecoration _inputDecoration({required String hint, Widget? suffixIcon}) {
@@ -144,7 +176,8 @@ class _AkunKaryawanTambahViewState extends State<AkunKaryawanTambahView> {
 
   Widget _buildBottomButton({
     required String label,
-    required VoidCallback onPressed,
+    required VoidCallback? onPressed,
+    bool isLoading = false,
     required bool isPrimary,
   }) {
     return Expanded(
@@ -161,13 +194,22 @@ class _AkunKaryawanTambahViewState extends State<AkunKaryawanTambahView> {
                     borderRadius: BorderRadius.circular(13),
                   ),
                 ),
-                child: Text(
-                  label,
-                  style: GoogleFonts.inter(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
+                child: isLoading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Text(
+                        label,
+                        style: GoogleFonts.inter(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
               )
             : OutlinedButton(
                 onPressed: onPressed,
@@ -346,13 +388,18 @@ class _AkunKaryawanTambahViewState extends State<AkunKaryawanTambahView> {
                         _buildBottomButton(
                           label: 'Batal',
                           isPrimary: false,
-                          onPressed: () => Navigator.pop(context),
+                          onPressed: widget.controller.isSubmitting
+                              ? null
+                              : () => Navigator.pop(context),
                         ),
                         const SizedBox(width: 10),
                         _buildBottomButton(
                           label: 'Simpan',
                           isPrimary: true,
-                          onPressed: _saveAccount,
+                          isLoading: widget.controller.isSubmitting,
+                          onPressed: widget.controller.isSubmitting
+                              ? null
+                              : _saveAccount,
                         ),
                       ],
                     ),
