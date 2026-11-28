@@ -1,45 +1,127 @@
 import 'package:flutter/material.dart';
 
-import 'kesehatan_unggah_foto_view.dart';
+import '../../controllers/diagnosis/diagnosis_controller.dart';
+import '../../models/diagnosis/diagnosis_model.dart';
 import '../widgets/bottom_navigation.dart';
 import 'kesehatan_riwayat_deteksi_view.dart';
+import 'kesehatan_riwayat_detail_view.dart';
+import 'kesehatan_unggah_foto_view.dart';
 
-class KesehatanView extends StatelessWidget {
+/// Dashboard Kesehatan dengan layout desain awal.
+/// Sumber data ringkasan dan tiga pemeriksaan terbaru berasal dari API diagnosis.
+class KesehatanView extends StatefulWidget {
   const KesehatanView({super.key});
 
+  @override
+  State<KesehatanView> createState() => _KesehatanViewState();
+}
+
+class _KesehatanViewState extends State<KesehatanView> {
   static const Color primaryColor = Color(0xFF6E8649);
   static const Color textColor = Color(0xFF26351F);
   static const Color mutedColor = Color(0xFF70786B);
   static const Color softGreen = Color(0xFFF1F5E9);
+  static const Color warningColor = Color(0xFF8C5B16);
+  static const Color warningBackground = Color(0xFFFFF5DF);
 
   static const String lettuceImage =
       'https://images.unsplash.com/photo-1540420773420-3366772f4999'
       '?auto=format&fit=crop&w=500&q=80';
 
-  final List<Map<String, String>> history = const [
-    {
-      'batch': 'Batch 04 • Selada',
-      'date': '05 Nov 2026, 09.41',
-      'status': 'Perlu perhatian',
-    },
-    {
-      'batch': 'Batch 03 • Selada',
-      'date': '04 Nov 2026, 08.15',
-      'status': 'Normal',
-    },
-    {
-      'batch': 'Batch 05 • Selada',
-      'date': '03 Nov 2026, 10.20',
-      'status': 'Normal',
-    },
-  ];
+  final DiagnosisController _diagnosisController = DiagnosisController();
+  bool _isLoadingOverview = false;
+  bool _overviewComplete = false;
 
-  void _showComingSoon(BuildContext context) {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _loadDashboard();
+    });
+  }
+
+  @override
+  void dispose() {
+    _diagnosisController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadDashboard() async {
+    if (_isLoadingOverview) return;
+
+    setState(() {
+      _isLoadingOverview = true;
+      _overviewComplete = false;
+    });
+
+    var complete = await _diagnosisController.loadDiagnoses(perPage: 50);
+
+    // Dashboard menampilkan ringkasan dari seluruh data diagnosis yang dimuat.
+    // Endpoint tidak menyediakan agregasi statistik, sehingga pagination dibaca
+    // sampai selesai agar hitungan Sehat/Perhatian tidak hanya berdasarkan page 1.
+    while (complete && _diagnosisController.hasMoreDiagnoses && mounted) {
+      complete = await _diagnosisController.loadMoreDiagnoses();
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      _isLoadingOverview = false;
+      _overviewComplete = complete && !_diagnosisController.hasMoreDiagnoses;
+    });
+  }
+
+  void _showMessage(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Halaman ini akan kita hubungkan pada langkah berikutnya.',
-        ),
+      SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
+    );
+  }
+
+  int get _normalCount =>
+      _diagnosisController.diagnoses.where((item) => item.isSehat).length;
+
+  int get _attentionCount =>
+      _diagnosisController.diagnoses.where((item) => !item.isSehat).length;
+
+  String _formatDate(DateTime date) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'Mei',
+      'Jun',
+      'Jul',
+      'Agu',
+      'Sep',
+      'Okt',
+      'Nov',
+      'Des',
+    ];
+
+    final day = date.day.toString().padLeft(2, '0');
+    final hour = date.hour.toString().padLeft(2, '0');
+    final minute = date.minute.toString().padLeft(2, '0');
+
+    return '$day ${months[date.month - 1]} ${date.year}, $hour.$minute';
+  }
+
+  String _budidayaTitle(DiagnosisModel diagnosis) {
+    return 'Budidaya #${diagnosis.budidayaId}';
+  }
+
+  String _locationLabel(DiagnosisModel diagnosis) {
+    final meja =
+        diagnosis.budidaya?.meja?.nomorMeja ?? diagnosis.budidaya?.mejaId;
+    return meja == null ? 'Budidaya #${diagnosis.budidayaId}' : 'Meja $meja';
+  }
+
+  void _openDetail(DiagnosisModel diagnosis) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) =>
+            KesehatanRiwayatDetailView(diagnosisId: diagnosis.id),
       ),
     );
   }
@@ -51,7 +133,6 @@ class KesehatanView extends StatelessWidget {
       body: Stack(
         children: [
           Container(color: primaryColor),
-
           SafeArea(
             bottom: false,
             child: Column(
@@ -89,7 +170,9 @@ class KesehatanView extends StatelessWidget {
                           ),
                         ),
                         IconButton(
-                          onPressed: () => _showComingSoon(context),
+                          onPressed: () => _showMessage(
+                            'Notifikasi kesehatan belum tersedia.',
+                          ),
                           icon: const Icon(
                             Icons.notifications_none_rounded,
                             color: Colors.white,
@@ -99,7 +182,6 @@ class KesehatanView extends StatelessWidget {
                     ),
                   ),
                 ),
-
                 Expanded(
                   child: Container(
                     width: double.infinity,
@@ -109,36 +191,55 @@ class KesehatanView extends StatelessWidget {
                         top: Radius.circular(28),
                       ),
                     ),
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildHeroCard(),
-
-                          const SizedBox(height: 12),
-
-                          _buildStartButton(context),
-
-                          const SizedBox(height: 10),
-
-                          _buildPhotoHint(),
-
-                          const SizedBox(height: 14),
-
-                          _buildSummary(),
-
-                          const SizedBox(height: 18),
-
-                          _buildHistoryHeader(context),
-
-                          const SizedBox(height: 8),
-
-                          ...history.map(
-                            (item) => _buildHistoryItem(context, item),
+                    child: AnimatedBuilder(
+                      animation: _diagnosisController,
+                      builder: (context, _) {
+                        return SingleChildScrollView(
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildHeroCard(),
+                              const SizedBox(height: 12),
+                              _buildStartButton(context),
+                              const SizedBox(height: 10),
+                              _buildPhotoHint(),
+                              const SizedBox(height: 14),
+                              _buildSummary(),
+                              const SizedBox(height: 18),
+                              _buildHistoryHeader(context),
+                              const SizedBox(height: 8),
+                              if (_diagnosisController.errorMessage != null &&
+                                  _diagnosisController.diagnoses.isEmpty)
+                                _buildLoadError(),
+                              if (_isLoadingOverview &&
+                                  _diagnosisController.diagnoses.isEmpty)
+                                const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 18),
+                                  child: Center(
+                                    child: SizedBox(
+                                      width: 22,
+                                      height: 22,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: primaryColor,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ..._diagnosisController.diagnoses
+                                  .take(3)
+                                  .map(
+                                    (item) => _buildHistoryItem(context, item),
+                                  ),
+                              if (!_isLoadingOverview &&
+                                  _diagnosisController.errorMessage == null &&
+                                  _diagnosisController.diagnoses.isEmpty)
+                                _buildEmptyHistory(),
+                            ],
                           ),
-                        ],
-                      ),
+                        );
+                      },
                     ),
                   ),
                 ),
@@ -147,7 +248,6 @@ class KesehatanView extends StatelessWidget {
           ),
         ],
       ),
-
       bottomNavigationBar: const BottomNavigation(currentIndex: 3),
     );
   }
@@ -226,7 +326,9 @@ class KesehatanView extends StatelessWidget {
             MaterialPageRoute(
               builder: (context) => const KesehatanUnggahFotoView(),
             ),
-          );
+          ).then((_) {
+            if (mounted) _loadDashboard();
+          });
         },
         style: ElevatedButton.styleFrom(
           backgroundColor: primaryColor,
@@ -268,11 +370,17 @@ class KesehatanView extends StatelessWidget {
   }
 
   Widget _buildSummary() {
+    final total = _diagnosisController.totalDiagnoses.toString();
+    final normal = _overviewComplete ? _normalCount.toString() : '—';
+    final attention = _overviewComplete ? _attentionCount.toString() : '—';
+
     return Row(
       children: [
         Expanded(
           child: _buildSummaryCard(
-            value: '3',
+            value: _isLoadingOverview && _diagnosisController.diagnoses.isEmpty
+                ? '—'
+                : total,
             label: 'Pemeriksaan',
             backgroundColor: softGreen,
             valueColor: textColor,
@@ -281,7 +389,7 @@ class KesehatanView extends StatelessWidget {
         const SizedBox(width: 10),
         Expanded(
           child: _buildSummaryCard(
-            value: '2',
+            value: normal,
             label: 'Normal',
             backgroundColor: softGreen,
             valueColor: textColor,
@@ -290,10 +398,10 @@ class KesehatanView extends StatelessWidget {
         const SizedBox(width: 10),
         Expanded(
           child: _buildSummaryCard(
-            value: '1',
+            value: attention,
             label: 'Perlu perhatian',
-            backgroundColor: const Color(0xFFFFF5DF),
-            valueColor: const Color(0xFF8C5B16),
+            backgroundColor: warningBackground,
+            valueColor: warningColor,
           ),
         ),
       ],
@@ -376,11 +484,14 @@ class KesehatanView extends StatelessWidget {
     );
   }
 
-  Widget _buildHistoryItem(BuildContext context, Map<String, String> item) {
-    final bool needsAttention = item['status'] == 'Perlu perhatian';
+  Widget _buildHistoryItem(BuildContext context, DiagnosisModel item) {
+    final needsAttention = !item.isSehat;
+    final statusColor = needsAttention ? warningColor : primaryColor;
+    final title = _budidayaTitle(item);
+    final location = _locationLabel(item);
 
     return InkWell(
-      onTap: () => _showComingSoon(context),
+      onTap: () => _openDetail(item),
       borderRadius: BorderRadius.circular(14),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 7),
@@ -389,7 +500,7 @@ class KesehatanView extends StatelessWidget {
             ClipRRect(
               borderRadius: BorderRadius.circular(11),
               child: Image.network(
-                lettuceImage,
+                item.imageUrl,
                 width: 48,
                 height: 48,
                 fit: BoxFit.cover,
@@ -409,7 +520,7 @@ class KesehatanView extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    item['batch']!,
+                    title,
                     style: const TextStyle(
                       color: textColor,
                       fontSize: 12,
@@ -419,7 +530,7 @@ class KesehatanView extends StatelessWidget {
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    item['date']!,
+                    _formatDate(item.tanggalDiagnosis),
                     style: const TextStyle(
                       color: mutedColor,
                       fontSize: 10,
@@ -428,11 +539,18 @@ class KesehatanView extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    item['status']!,
+                    location,
+                    style: const TextStyle(
+                      color: mutedColor,
+                      fontSize: 10,
+                      fontFamily: 'Inter',
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    needsAttention ? 'Perlu perhatian' : 'Normal',
                     style: TextStyle(
-                      color: needsAttention
-                          ? const Color(0xFF8C5B16)
-                          : primaryColor,
+                      color: statusColor,
                       fontSize: 10,
                       fontWeight: FontWeight.w600,
                       fontFamily: 'Inter',
@@ -447,6 +565,57 @@ class KesehatanView extends StatelessWidget {
               size: 20,
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLoadError() {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: softGreen,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _diagnosisController.errorMessage ??
+                'Gagal memuat pemeriksaan kesehatan.',
+            style: const TextStyle(
+              color: textColor,
+              fontSize: 11,
+              fontFamily: 'Inter',
+            ),
+          ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: _isLoadingOverview ? null : _loadDashboard,
+              icon: const Icon(Icons.refresh_rounded, size: 16),
+              label: const Text('Coba lagi'),
+              style: TextButton.styleFrom(foregroundColor: primaryColor),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyHistory() {
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 20),
+      child: Center(
+        child: Text(
+          'Belum ada pemeriksaan tersimpan.',
+          style: TextStyle(
+            color: mutedColor,
+            fontSize: 11,
+            fontFamily: 'Inter',
+          ),
         ),
       ),
     );

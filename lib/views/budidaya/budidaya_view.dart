@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../../controllers/budidaya/budidaya_controller.dart';
+import '../../controllers/panen/panen_controller.dart';
+import '../../models/budidaya/budidaya_model.dart';
+import '../../models/panen/panen_model.dart';
 import '../widgets/bottom_navigation.dart';
-import 'tambah_rotasi_panen_view.dart';
 
 class BudidayaView extends StatefulWidget {
   const BudidayaView({super.key});
@@ -17,47 +20,174 @@ class _BudidayaViewState extends State<BudidayaView> {
   static const Color mutedColor = Color(0xFF70786B);
   static const Color borderColor = Color(0xFFDFE5D7);
 
+  late final BudidayaController _budidayaController;
+  late final PanenController _panenController;
+  late final ScrollController _scrollController;
+
   int selectedTab = 0;
+  String selectedStatus = BudidayaModel.statusBerjalan;
 
-  final DateTime harvestReferenceDate = DateTime(2026, 11, 5);
+  DateTime selectedCalendarMonth = DateTime(
+    DateTime.now().year,
+    DateTime.now().month,
+    1,
+  );
+  int selectedCalendarDay = DateTime.now().day;
+  String? _loadedPanenMonthKey;
 
-  DateTime selectedCalendarMonth = DateTime(2026, 11, 1);
+  @override
+  void initState() {
+    super.initState();
+    _budidayaController = BudidayaController();
+    _panenController = PanenController();
+    _scrollController = ScrollController()..addListener(_handleScroll);
 
-  int selectedCalendarDay = 5;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadBudidaya();
+    });
+  }
 
-  final List<Map<String, dynamic>> batches = [
-    {
-      'name': 'Batch 03',
-      'plant': 'Selada',
-      'date': DateTime(2026, 10, 5),
-      'holes': 24,
-      'harvestDate': DateTime(2026, 11, 9),
-    },
-    {
-      'name': 'Batch 04',
-      'plant': 'Selada',
-      'date': DateTime(2026, 10, 18),
-      'holes': 12,
-      'harvestDate': DateTime(2026, 11, 22),
-    },
-    {
-      'name': 'Batch 05',
-      'plant': 'Selada',
-      'date': DateTime(2026, 10, 25),
-      'holes': 12,
-      'harvestDate': DateTime(2026, 11, 29),
-    },
-  ];
+  @override
+  void dispose() {
+    _scrollController
+      ..removeListener(_handleScroll)
+      ..dispose();
+    _budidayaController.dispose();
+    _panenController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadBudidaya({String? status}) async {
+    final effectiveStatus = selectedStatus == 'semua'
+        ? null
+        : status ?? selectedStatus;
+
+    await _budidayaController.loadBudidayas(
+      status: effectiveStatus,
+      perPage: 15,
+    );
+  }
+
+  Future<void> _changeStatus(String value) async {
+    if (selectedStatus == value || _budidayaController.isLoading) return;
+
+    setState(() => selectedStatus = value);
+    await _loadBudidaya(status: value == 'semua' ? null : value);
+  }
+
+  void _selectTab(int index) {
+    if (selectedTab == index) return;
+    setState(() => selectedTab = index);
+
+    if (index == 1) {
+      _loadPanensForSelectedMonth();
+    }
+  }
+
+  String _calendarMonthKey(DateTime date) =>
+      '${date.year}-${date.month.toString().padLeft(2, '0')}';
+
+  Future<void> _loadPanensForSelectedMonth({bool force = false}) async {
+    final monthKey = _calendarMonthKey(selectedCalendarMonth);
+    if (_panenController.isLoading || _panenController.isLoadingMore) return;
+    if (!force && _loadedPanenMonthKey == monthKey) return;
+
+    final from = DateTime(
+      selectedCalendarMonth.year,
+      selectedCalendarMonth.month,
+      1,
+    );
+    final to = DateTime(
+      selectedCalendarMonth.year,
+      selectedCalendarMonth.month + 1,
+      0,
+    );
+
+    final loaded = await _panenController.loadPanens(
+      from: from,
+      to: to,
+      perPage: 50,
+    );
+
+    if (!mounted) return;
+    if (loaded) {
+      setState(() => _loadedPanenMonthKey = monthKey);
+    }
+  }
+
+  Future<void> _refreshCurrentTab() async {
+    if (selectedTab == 0) {
+      await _budidayaController.refreshBudidayas();
+    } else {
+      await _loadPanensForSelectedMonth(force: true);
+    }
+  }
+
+  List<PanenModel> get _panensForSelectedMonth =>
+      _panenController.panens.where((item) {
+        return item.tanggalPanen.year == selectedCalendarMonth.year &&
+            item.tanggalPanen.month == selectedCalendarMonth.month;
+      }).toList();
+
+  Future<void> _openTambahPanen() async {
+    final saved = await Navigator.pushNamed(context, '/panen/tambah');
+    if (!mounted) return;
+    if (saved == true) {
+      await _loadPanensForSelectedMonth(force: true);
+    }
+  }
+
+  Future<void> _openEditPanen(PanenModel item) async {
+    final saved = await Navigator.pushNamed(
+      context,
+      '/panen/edit',
+      arguments: {'id': item.id},
+    );
+    if (!mounted) return;
+    if (saved == true) {
+      await _loadPanensForSelectedMonth(force: true);
+    }
+  }
+
+  Future<void> _changeCalendarMonth(int offset) async {
+    if (_panenController.isLoading || _panenController.isLoadingMore) return;
+
+    setState(() {
+      selectedCalendarMonth = DateTime(
+        selectedCalendarMonth.year,
+        selectedCalendarMonth.month + offset,
+        1,
+      );
+      selectedCalendarDay = 1;
+    });
+
+    await _loadPanensForSelectedMonth(force: true);
+  }
+
+  void _handleScroll() {
+    if (!_scrollController.hasClients) return;
+
+    final position = _scrollController.position;
+    if (position.maxScrollExtent - position.pixels >= 240) return;
+
+    if (selectedTab == 0) {
+      if (_budidayaController.hasMoreBudidayas &&
+          !_budidayaController.isLoadingMore &&
+          !_budidayaController.isLoading) {
+        _budidayaController.loadMoreBudidayas();
+      }
+      return;
+    }
+
+    if (_panenController.hasMorePanens &&
+        !_panenController.isLoadingMore &&
+        !_panenController.isLoading) {
+      _panenController.loadMorePanens();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final today = harvestReferenceDate;
-
-    final totalHoles = batches.fold<int>(
-      0,
-      (sum, item) => sum + (item['holes'] as int),
-    );
-
     return Scaffold(
       backgroundColor: primaryColor,
       body: Stack(
@@ -69,7 +199,6 @@ class _BudidayaViewState extends State<BudidayaView> {
             height: 160,
             child: _buildHeader(context),
           ),
-
           Positioned(
             top: 136,
             left: 0,
@@ -80,40 +209,35 @@ class _BudidayaViewState extends State<BudidayaView> {
                 color: Colors.white,
                 borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
               ),
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(16, 18, 16, 110),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildTabSelector(),
-
-                    const SizedBox(height: 12),
-
-                    if (selectedTab == 0) ...[
-                      _buildSummary(today, totalHoles),
-
-                      const SizedBox(height: 12),
-
-                      _buildAddButton(),
-
-                      const SizedBox(height: 12),
-
-                      _buildSectionHeader(),
-
-                      const SizedBox(height: 10),
-
-                      ...batches.map(
-                        (batch) => Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: _buildBatchCard(batch, today),
-                        ),
+              child: AnimatedBuilder(
+                animation: Listenable.merge([
+                  _budidayaController,
+                  _panenController,
+                ]),
+                builder: (context, _) {
+                  return RefreshIndicator(
+                    color: primaryColor,
+                    onRefresh: _refreshCurrentTab,
+                    child: SingleChildScrollView(
+                      controller: _scrollController,
+                      physics: const AlwaysScrollableScrollPhysics(
+                        parent: BouncingScrollPhysics(),
                       ),
-                    ] else ...[
-                      _buildHarvestContent(),
-                    ],
-                  ],
-                ),
+                      padding: const EdgeInsets.fromLTRB(16, 18, 16, 110),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildTabSelector(),
+                          const SizedBox(height: 12),
+                          if (selectedTab == 0)
+                            _buildBudidayaContent()
+                          else
+                            _buildHarvestContent(),
+                        ],
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
           ),
@@ -147,9 +271,7 @@ class _BudidayaViewState extends State<BudidayaView> {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-
                 SizedBox(height: 5),
-
                 Text(
                   'Pantau usia tanaman dan rencana panen.',
                   style: TextStyle(color: Colors.white, fontSize: 11),
@@ -157,7 +279,6 @@ class _BudidayaViewState extends State<BudidayaView> {
               ],
             ),
           ),
-
           Stack(
             clipBehavior: Clip.none,
             children: [
@@ -166,7 +287,6 @@ class _BudidayaViewState extends State<BudidayaView> {
                 color: Colors.white,
                 size: 24,
               ),
-
               Positioned(
                 top: 0,
                 right: 0,
@@ -205,11 +325,7 @@ class _BudidayaViewState extends State<BudidayaView> {
 
     return Expanded(
       child: GestureDetector(
-        onTap: () {
-          setState(() {
-            selectedTab = index;
-          });
-        },
+        onTap: () => _selectTab(index),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           alignment: Alignment.center,
@@ -230,11 +346,70 @@ class _BudidayaViewState extends State<BudidayaView> {
     );
   }
 
-  Widget _buildSummary(DateTime today, int totalHoles) {
-    final days = batches.isNotEmpty
-        ? _daysUntilHarvest(today, batches.first)
-        : 0;
+  Widget _buildBudidayaContent() {
+    final items = _budidayaController.budidayas;
+    final totalPlants = items.fold<int>(
+      0,
+      (sum, item) => sum + item.jumlahTanaman,
+    );
 
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildBudidayaSummary(
+          total: _budidayaController.totalBudidayas,
+          loaded: items.length,
+          totalPlants: totalPlants,
+        ),
+        const SizedBox(height: 12),
+        _buildAddButton(),
+        const SizedBox(height: 12),
+        _buildSectionHeader(),
+        const SizedBox(height: 10),
+        _buildStatusFilters(),
+        const SizedBox(height: 10),
+        if (_budidayaController.isLoading && items.isEmpty)
+          _buildLoadingState()
+        else if (_budidayaController.errorMessage != null && items.isEmpty)
+          _buildErrorState(_budidayaController.errorMessage!)
+        else if (items.isEmpty)
+          _buildEmptyState()
+        else ...[
+          ...items.map(
+            (item) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _buildBudidayaCard(item),
+            ),
+          ),
+          if (_budidayaController.isLoadingMore)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 14),
+              child: Center(
+                child: SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.4,
+                    color: primaryColor,
+                  ),
+                ),
+              ),
+            ),
+          if (_budidayaController.loadMoreErrorMessage != null)
+            _buildLoadMoreError(),
+          if (_budidayaController.hasMoreBudidayas &&
+              !_budidayaController.isLoadingMore)
+            _buildLoadMoreButton(),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildBudidayaSummary({
+    required int total,
+    required int loaded,
+    required int totalPlants,
+  }) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
@@ -245,20 +420,16 @@ class _BudidayaViewState extends State<BudidayaView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Kebun hari ini • ${_formatDate(today)}',
-            style: const TextStyle(color: mutedColor, fontSize: 10),
+          const Text(
+            'Ringkasan budidaya',
+            style: TextStyle(color: mutedColor, fontSize: 10),
           ),
-
           const SizedBox(height: 10),
-
           Row(
             children: [
-              Expanded(child: _summaryItem('${batches.length}', 'Batch aktif')),
-
-              Expanded(child: _summaryItem('$totalHoles', 'Lubang tanam')),
-
-              Expanded(child: _summaryItem('$days hari', 'Panen terdekat')),
+              Expanded(child: _summaryItem('$total', 'Total data')),
+              Expanded(child: _summaryItem('$loaded', 'Data termuat')),
+              Expanded(child: _summaryItem('$totalPlants', 'Tanaman termuat')),
             ],
           ),
         ],
@@ -278,9 +449,7 @@ class _BudidayaViewState extends State<BudidayaView> {
             fontWeight: FontWeight.w700,
           ),
         ),
-
         const SizedBox(height: 2),
-
         Text(label, style: const TextStyle(color: mutedColor, fontSize: 9)),
       ],
     );
@@ -291,8 +460,9 @@ class _BudidayaViewState extends State<BudidayaView> {
       width: double.infinity,
       height: 42,
       child: ElevatedButton.icon(
-        onPressed: () {
-          Navigator.pushNamed(context, '/budidaya/tambah');
+        onPressed: () async {
+          await Navigator.pushNamed(context, '/budidaya/tambah');
+          if (mounted) _budidayaController.refreshBudidayas();
         },
         icon: const Icon(Icons.add_rounded, size: 18),
         label: const Text(
@@ -316,42 +486,100 @@ class _BudidayaViewState extends State<BudidayaView> {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         const Text(
-          'Budidaya aktif',
+          'Daftar budidaya',
           style: TextStyle(
             color: textColor,
             fontSize: 14,
             fontWeight: FontWeight.w700,
           ),
         ),
-
-        GestureDetector(
-          onTap: () {
-            Navigator.pushNamed(context, '/budidaya/riwayat');
-          },
-          child: const Text(
-            'Semua Riwayat',
-            style: TextStyle(
-              color: primaryColor,
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-            ),
+        Text(
+          '${_budidayaController.totalBudidayas} data',
+          style: const TextStyle(
+            color: primaryColor,
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
           ),
         ),
       ],
     );
   }
 
-  Widget _buildBatchCard(Map<String, dynamic> batch, DateTime today) {
-    final sowDate = batch['date'] as DateTime;
-    final harvestDate = batch['harvestDate'] as DateTime;
+  Widget _buildStatusFilters() {
+    return Row(
+      children: [
+        Expanded(
+          child: _buildStatusFilter('Berjalan', BudidayaModel.statusBerjalan),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _buildStatusFilter('Selesai', BudidayaModel.statusSelesai),
+        ),
+        const SizedBox(width: 8),
+        Expanded(child: _buildStatusFilter('Semua', 'semua')),
+      ],
+    );
+  }
 
-    final age = today.difference(sowDate).inDays;
-    final remaining = harvestDate.difference(today).inDays;
+  Widget _buildStatusFilter(String label, String value) {
+    final selected = selectedStatus == value;
 
-    final progress = (age / 35).clamp(0.0, 1.0).toDouble();
+    return GestureDetector(
+      onTap: () => _changeStatus(value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        height: 30,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: selected ? primaryColor : softColor,
+          borderRadius: BorderRadius.circular(9),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: selected ? Colors.white : primaryColor,
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openEditBudidaya(BudidayaModel item) async {
+    await Navigator.pushNamed(
+      context,
+      '/budidaya/edit',
+      arguments: {
+        'id': item.id,
+        'meja_id': item.mejaId,
+        'tanggal_semai': _formatApiDate(item.tanggalSemai),
+        'jumlah_tanaman': item.jumlahTanaman,
+        'status': item.status,
+      },
+    );
+
+    if (mounted) {
+      await _budidayaController.refreshBudidayas();
+    }
+  }
+
+  String _formatApiDate(DateTime date) {
+    final year = date.year.toString().padLeft(4, '0');
+    final month = date.month.toString().padLeft(2, '0');
+    final day = date.day.toString().padLeft(2, '0');
+    return '$year-$month-$day';
+  }
+
+  Widget _buildBudidayaCard(BudidayaModel item) {
+    final mejaLabel = item.meja == null
+        ? 'Meja ${item.mejaId}'
+        : 'Meja ${item.meja!.nomorMeja}';
+    final isRunning = item.status == BudidayaModel.statusBerjalan;
 
     return Container(
-      padding: const EdgeInsets.all(10),
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
         border: Border.all(color: borderColor),
@@ -364,15 +592,30 @@ class _BudidayaViewState extends State<BudidayaView> {
             children: [
               Expanded(
                 child: Text(
-                  '${batch['name']} • ${batch['plant']}',
+                  'Budidaya #${item.id}',
                   style: const TextStyle(
                     color: textColor,
-                    fontSize: 11,
+                    fontSize: 12,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
-
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                decoration: BoxDecoration(
+                  color: isRunning ? softColor : const Color(0xFFF3F0E8),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  isRunning ? 'Berjalan' : 'Selesai',
+                  style: TextStyle(
+                    color: isRunning ? primaryColor : const Color(0xFF8A7047),
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 7),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
                 decoration: BoxDecoration(
@@ -380,7 +623,7 @@ class _BudidayaViewState extends State<BudidayaView> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  '${age < 0 ? 0 : age} HSS',
+                  '${item.hss} HSS',
                   style: const TextStyle(
                     color: primaryColor,
                     fontSize: 9,
@@ -390,66 +633,46 @@ class _BudidayaViewState extends State<BudidayaView> {
               ),
             ],
           ),
-
-          const SizedBox(height: 4),
-
-          Text(
-            'Semai ${_formatDate(sowDate)} • ${batch['holes']} lubang',
-            style: const TextStyle(color: mutedColor, fontSize: 9),
-          ),
-
-          const SizedBox(height: 8),
-
-          ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: LinearProgressIndicator(
-              value: progress,
-              minHeight: 4,
-              backgroundColor: const Color(0xFFE8EDDF),
-              valueColor: const AlwaysStoppedAnimation<Color>(primaryColor),
-            ),
-          ),
-
           const SizedBox(height: 7),
-
+          Text(
+            'Semai ${_formatDate(item.tanggalSemai)} • $mejaLabel',
+            style: const TextStyle(color: mutedColor, fontSize: 10),
+          ),
+          const SizedBox(height: 9),
           Row(
             children: [
-              Expanded(
-                child: Text(
-                  'Panen ${_formatDate(harvestDate)}',
-                  style: const TextStyle(
-                    color: primaryColor,
-                    fontSize: 9,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-
+              const Icon(Icons.spa_outlined, color: primaryColor, size: 17),
+              const SizedBox(width: 6),
               Text(
-                remaining >= 0
-                    ? '+ $remaining hari lagi'
-                    : 'Lewat ${remaining.abs()} hari',
+                '${item.jumlahTanaman} tanaman',
                 style: const TextStyle(
-                  color: primaryColor,
-                  fontSize: 9,
+                  color: textColor,
+                  fontSize: 11,
                   fontWeight: FontWeight.w600,
                 ),
               ),
-
-              const SizedBox(width: 6),
-
-              GestureDetector(
-                onTap: () {
-                  Navigator.pushNamed(
-                    context,
-                    '/budidaya/edit',
-                    arguments: batch,
-                  );
-                },
-                child: const Icon(
+              const Spacer(),
+              if (item.user?.nama != null)
+                Flexible(
+                  child: Text(
+                    'Oleh ${item.user!.nama}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.right,
+                    style: const TextStyle(color: mutedColor, fontSize: 9),
+                  ),
+                ),
+              const SizedBox(width: 4),
+              IconButton(
+                tooltip: 'Edit budidaya',
+                visualDensity: VisualDensity.compact,
+                constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+                padding: EdgeInsets.zero,
+                onPressed: () => _openEditBudidaya(item),
+                icon: const Icon(
                   Icons.edit_outlined,
                   color: primaryColor,
-                  size: 16,
+                  size: 18,
                 ),
               ),
             ],
@@ -459,74 +682,212 @@ class _BudidayaViewState extends State<BudidayaView> {
     );
   }
 
+  Widget _buildLoadingState() {
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 34),
+      child: Center(child: CircularProgressIndicator(color: primaryColor)),
+    );
+  }
+
+  Widget _buildErrorState(String message) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF5F2),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFF0D4CA)),
+      ),
+      child: Column(
+        children: [
+          const Icon(
+            Icons.cloud_off_outlined,
+            color: Color(0xFFAE4E3D),
+            size: 28,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Color(0xFF8E4135), fontSize: 11),
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: () => _loadBudidaya(
+              status: selectedStatus == 'semua' ? null : selectedStatus,
+            ),
+            icon: const Icon(Icons.refresh_rounded, size: 17),
+            label: const Text('Coba lagi'),
+            style: OutlinedButton.styleFrom(foregroundColor: primaryColor),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 18),
+      child: Column(
+        children: [
+          const Icon(Icons.spa_outlined, color: primaryColor, size: 34),
+          const SizedBox(height: 9),
+          const Text(
+            'Belum ada data budidaya',
+            style: TextStyle(
+              color: textColor,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Data budidaya akan muncul di sini setelah tersimpan.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: mutedColor, fontSize: 10),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoadMoreError() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Column(
+        children: [
+          Text(
+            _budidayaController.loadMoreErrorMessage!,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Color(0xFFAE4E3D), fontSize: 10),
+          ),
+          TextButton(
+            onPressed: () => _budidayaController.loadMoreBudidayas(),
+            child: const Text(
+              'Muat lagi',
+              style: TextStyle(color: primaryColor),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoadMoreButton() {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton(
+        onPressed: () => _budidayaController.loadMoreBudidayas(),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: primaryColor,
+          side: const BorderSide(color: primaryColor),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+        child: const Text('Muat lebih banyak'),
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Kalender dan daftar panen dari API.
+  // ---------------------------------------------------------------------------
+
   Widget _buildHarvestContent() {
-    final monthlyRotations = _getMonthlyRotations();
+    final panens = List<PanenModel>.from(_panensForSelectedMonth)
+      ..sort((a, b) => a.tanggalPanen.compareTo(b.tanggalPanen));
+    final totalLabel =
+        _loadedPanenMonthKey == _calendarMonthKey(selectedCalendarMonth)
+        ? '${_panenController.totalPanens} data'
+        : '—';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildHarvestCalendar(),
-
-        const SizedBox(height: 10),
-
-        SizedBox(
-          width: double.infinity,
-          height: 52,
-          child: ElevatedButton.icon(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const TambahRotasiPanenView(),
-                ),
-              );
-            },
-            icon: const Icon(Icons.add_rounded, size: 20),
-            label: const Text(
-              'Tambah rotasi panen',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: primaryColor,
-              foregroundColor: Colors.white,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-            ),
-          ),
-        ),
-
-        const SizedBox(height: 12),
-
-        const Text(
-          'Rotasi bulan ini',
-          style: TextStyle(
-            color: textColor,
-            fontSize: 17,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-
-        const SizedBox(height: 10),
-
-        ...monthlyRotations.map(
-          (batch) => Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: _buildHarvestRotationCard(batch),
-          ),
-        ),
-
-        if (monthlyRotations.isEmpty)
-          const Padding(
-            padding: EdgeInsets.all(24),
-            child: Center(
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            const Expanded(
               child: Text(
-                'Belum ada jadwal panen pada bulan ini.',
-                style: TextStyle(color: mutedColor, fontSize: 12),
+                'Jadwal panen',
+                style: TextStyle(
+                  color: textColor,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            Text(
+              totalLabel,
+              style: const TextStyle(
+                color: primaryColor,
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(width: 9),
+            SizedBox(
+              height: 34,
+              child: ElevatedButton.icon(
+                onPressed: _panenController.isLoading ? null : _openTambahPanen,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primaryColor,
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: const Color(0xFFB8C3AA),
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                ),
+                icon: const Icon(Icons.add_rounded, size: 15),
+                label: const Text(
+                  'Tambah',
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        if (_panenController.isLoading && panens.isEmpty)
+          _buildPanenLoadingState()
+        else if (_panenController.errorMessage != null && panens.isEmpty)
+          _buildPanenErrorState(_panenController.errorMessage!)
+        else if (panens.isEmpty)
+          _buildPanenEmptyState()
+        else ...[
+          ...panens.map(
+            (item) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: InkWell(
+                onTap: () => _openEditPanen(item),
+                borderRadius: BorderRadius.circular(14),
+                child: _buildPanenCard(item),
               ),
             ),
           ),
+          if (_panenController.isLoadingMore)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 14),
+              child: Center(
+                child: SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.4,
+                    color: primaryColor,
+                  ),
+                ),
+              ),
+            ),
+          if (_panenController.loadMoreErrorMessage != null)
+            _buildPanenLoadMoreError(),
+          if (_panenController.hasMorePanens && !_panenController.isLoadingMore)
+            _buildPanenLoadMoreButton(),
+        ],
       ],
     );
   }
@@ -534,16 +895,20 @@ class _BudidayaViewState extends State<BudidayaView> {
   Widget _buildHarvestCalendar() {
     final year = selectedCalendarMonth.year;
     final month = selectedCalendarMonth.month;
-
     final firstDay = DateTime(year, month, 1);
     final daysInMonth = DateTime(year, month + 1, 0).day;
-
     final leadingDays = firstDay.weekday - 1;
+    final today = DateTime.now();
+    final todayOnly = DateTime(today.year, today.month, today.day);
 
-    final harvestDays = batches
-        .map((batch) => batch['harvestDate'] as DateTime)
-        .where((date) => date.month == month && date.year == year)
-        .map((date) => date.day)
+    final monthlyPanens = _panensForSelectedMonth;
+    final scheduledDays = monthlyPanens
+        .where((item) => item.status == PanenModel.statusTerjadwal)
+        .map((item) => item.tanggalPanen.day)
+        .toSet();
+    final completedDays = monthlyPanens
+        .where((item) => item.status == PanenModel.statusSelesai)
+        .map((item) => item.tanggalPanen.day)
         .toSet();
 
     return Container(
@@ -559,12 +924,9 @@ class _BudidayaViewState extends State<BudidayaView> {
           Row(
             children: [
               IconButton(
-                onPressed: () {
-                  setState(() {
-                    selectedCalendarMonth = DateTime(year, month - 1, 1);
-                    selectedCalendarDay = 0;
-                  });
-                },
+                onPressed: _panenController.isLoading
+                    ? null
+                    : () => _changeCalendarMonth(-1),
                 icon: const Icon(
                   Icons.chevron_left_rounded,
                   color: primaryColor,
@@ -572,7 +934,6 @@ class _BudidayaViewState extends State<BudidayaView> {
                 ),
                 visualDensity: VisualDensity.compact,
               ),
-
               Expanded(
                 child: Text(
                   _formatCalendarMonth(selectedCalendarMonth),
@@ -584,14 +945,10 @@ class _BudidayaViewState extends State<BudidayaView> {
                   ),
                 ),
               ),
-
               IconButton(
-                onPressed: () {
-                  setState(() {
-                    selectedCalendarMonth = DateTime(year, month + 1, 1);
-                    selectedCalendarDay = 0;
-                  });
-                },
+                onPressed: _panenController.isLoading
+                    ? null
+                    : () => _changeCalendarMonth(1),
                 icon: const Icon(
                   Icons.chevron_right_rounded,
                   color: primaryColor,
@@ -601,130 +958,132 @@ class _BudidayaViewState extends State<BudidayaView> {
               ),
             ],
           ),
-
           const SizedBox(height: 2),
-
           Row(
-            children: ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'].map((
-              day,
-            ) {
-              return Expanded(
-                child: Text(
-                  day,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: mutedColor,
-                    fontSize: 9,
-                    fontWeight: FontWeight.w500,
+            children: ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min']
+                .map(
+                  (day) => Expanded(
+                    child: Text(
+                      day,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: mutedColor,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                   ),
-                ),
-              );
-            }).toList(),
+                )
+                .toList(),
           ),
-
           const SizedBox(height: 5),
-
           SizedBox(
-            height: 6 * 26,
+            height: 6 * 30,
             child: GridView.builder(
               padding: EdgeInsets.zero,
               physics: const NeverScrollableScrollPhysics(),
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 7,
-                mainAxisExtent: 26,
+                mainAxisExtent: 30,
               ),
               itemCount: 42,
               itemBuilder: (context, index) {
                 final day = index - leadingDays + 1;
-
                 if (day < 1 || day > daysInMonth) {
                   return const SizedBox.shrink();
                 }
 
-                final isToday =
-                    year == harvestReferenceDate.year &&
-                    month == harvestReferenceDate.month &&
-                    day == harvestReferenceDate.day;
+                final date = DateTime(year, month, day);
+                final isToday = date == todayOnly;
 
                 return _buildCalendarDay(
                   day: day,
                   isToday: isToday,
-                  hasHarvest: harvestDays.contains(day),
+                  hasScheduled: scheduledDays.contains(day),
+                  hasCompleted: completedDays.contains(day),
                 );
               },
             ),
           ),
-
           const SizedBox(height: 7),
-
-          Row(
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 16,
+            runSpacing: 6,
             children: [
-              Container(
-                width: 9,
-                height: 9,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  border: Border.all(color: primaryColor),
-                  borderRadius: BorderRadius.circular(3),
-                ),
+              _buildCalendarLegend(
+                color: Colors.white,
+                borderColor: primaryColor,
+                label: 'Hari ini',
               ),
-
-              const SizedBox(width: 5),
-
-              const Text(
-                'Hari ini',
-                style: TextStyle(color: mutedColor, fontSize: 9),
-              ),
-
-              const SizedBox(width: 18),
-
-              Container(
-                width: 9,
-                height: 9,
-                decoration: BoxDecoration(
-                  color: primaryColor,
-                  borderRadius: BorderRadius.circular(3),
-                ),
-              ),
-
-              const SizedBox(width: 5),
-
-              const Text(
-                'Jadwal panen',
-                style: TextStyle(color: mutedColor, fontSize: 9),
+              _buildCalendarLegend(color: primaryColor, label: 'Terjadwal'),
+              _buildCalendarLegend(
+                color: const Color(0xFFE9EFE0),
+                label: 'Selesai',
               ),
             ],
           ),
+          if (_panenController.isLoading && monthlyPanens.isEmpty)
+            const Padding(
+              padding: EdgeInsets.only(top: 10),
+              child: LinearProgressIndicator(
+                minHeight: 2,
+                color: primaryColor,
+                backgroundColor: softColor,
+              ),
+            ),
         ],
       ),
+    );
+  }
+
+  Widget _buildCalendarLegend({
+    required Color color,
+    Color? borderColor,
+    required String label,
+  }) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 9,
+          height: 9,
+          decoration: BoxDecoration(
+            color: color,
+            border: borderColor == null ? null : Border.all(color: borderColor),
+            borderRadius: BorderRadius.circular(3),
+          ),
+        ),
+        const SizedBox(width: 5),
+        Text(label, style: const TextStyle(color: mutedColor, fontSize: 9)),
+      ],
     );
   }
 
   Widget _buildCalendarDay({
     required int day,
     required bool isToday,
-    required bool hasHarvest,
+    required bool hasScheduled,
+    required bool hasCompleted,
   }) {
     final isSelected = selectedCalendarDay == day;
-
-    final backgroundColor = hasHarvest ? primaryColor : Colors.transparent;
-
-    final foregroundColor = hasHarvest ? Colors.white : textColor;
+    final backgroundColor = hasScheduled
+        ? primaryColor
+        : hasCompleted
+        ? const Color(0xFFE9EFE0)
+        : Colors.transparent;
+    final foregroundColor = hasScheduled ? Colors.white : textColor;
 
     return Center(
       child: GestureDetector(
-        onTap: () {
-          setState(() {
-            selectedCalendarDay = day;
-          });
-        },
+        onTap: () => setState(() => selectedCalendarDay = day),
         child: Container(
-          width: 24,
-          height: 24,
+          width: 26,
+          height: 26,
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: backgroundColor,
-            border: (isToday || (isSelected && !hasHarvest))
+            border: (isToday || isSelected) && !hasScheduled
                 ? Border.all(color: primaryColor)
                 : null,
             borderRadius: BorderRadius.circular(7),
@@ -734,7 +1093,7 @@ class _BudidayaViewState extends State<BudidayaView> {
             style: TextStyle(
               color: foregroundColor,
               fontSize: 11,
-              fontWeight: isToday || hasHarvest || isSelected
+              fontWeight: isToday || hasScheduled || hasCompleted || isSelected
                   ? FontWeight.w700
                   : FontWeight.w400,
             ),
@@ -744,33 +1103,42 @@ class _BudidayaViewState extends State<BudidayaView> {
     );
   }
 
-  List<Map<String, dynamic>> _getMonthlyRotations() {
-    final rotations = batches.where((batch) {
-      final harvestDate = batch['harvestDate'] as DateTime;
+  Widget _buildPanenCard(PanenModel item) {
+    final budidaya = item.budidaya;
+    final isCompleted = item.status == PanenModel.statusSelesai;
+    final panenDate = _dateOnly(item.tanggalPanen);
+    final today = _dateOnly(DateTime.now());
+    final remainingDays = panenDate.difference(today).inDays;
+    final mejaLabel = budidaya?.meja == null
+        ? 'Meja ${budidaya?.mejaId ?? '-'}'
+        : 'Meja ${budidaya!.meja!.nomorMeja}';
 
-      return harvestDate.month == selectedCalendarMonth.month &&
-          harvestDate.year == selectedCalendarMonth.year;
-    }).toList();
+    final statusLabel = isCompleted ? 'Selesai' : 'Terjadwal';
+    final statusColor = isCompleted ? const Color(0xFF8A7047) : primaryColor;
+    final statusBackground = isCompleted ? const Color(0xFFF3F0E8) : softColor;
 
-    rotations.sort((a, b) {
-      final dateA = a['harvestDate'] as DateTime;
-      final dateB = b['harvestDate'] as DateTime;
+    String timingLabel;
+    if (isCompleted) {
+      timingLabel = item.beratKg == null
+          ? 'Berat belum tersedia'
+          : '${item.beratKg!.toStringAsFixed(2)} kg';
+    } else if (remainingDays == 0) {
+      timingLabel = 'Hari ini';
+    } else if (remainingDays > 0) {
+      timingLabel = '$remainingDays hari lagi';
+    } else {
+      timingLabel = 'Terlambat ${remainingDays.abs()} hari';
+    }
 
-      return dateA.compareTo(dateB);
-    });
-
-    return rotations;
-  }
-
-  Widget _buildHarvestRotationCard(Map<String, dynamic> batch) {
-    final harvestDate = batch['harvestDate'] as DateTime;
-
-    final remaining = harvestDate.difference(harvestReferenceDate).inDays;
+    final details = <String>[
+      mejaLabel,
+      'Budidaya #${item.budidayaId}',
+      if (budidaya != null) '${budidaya.jumlahTanaman} tanaman',
+    ];
 
     return Container(
       width: double.infinity,
-      height: 64,
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.all(11),
       decoration: BoxDecoration(
         color: Colors.white,
         border: Border.all(color: borderColor),
@@ -779,8 +1147,8 @@ class _BudidayaViewState extends State<BudidayaView> {
       child: Row(
         children: [
           Container(
-            width: 44,
-            height: 46,
+            width: 46,
+            height: 48,
             decoration: BoxDecoration(
               color: softColor,
               borderRadius: BorderRadius.circular(10),
@@ -789,16 +1157,15 @@ class _BudidayaViewState extends State<BudidayaView> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
-                  harvestDate.day.toString().padLeft(2, '0'),
+                  item.tanggalPanen.day.toString().padLeft(2, '0'),
                   style: const TextStyle(
                     color: primaryColor,
                     fontSize: 19,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-
                 Text(
-                  _formatMonthShort(harvestDate.month),
+                  _formatMonthShort(item.tanggalPanen.month),
                   style: const TextStyle(
                     color: primaryColor,
                     fontSize: 8,
@@ -808,70 +1175,180 @@ class _BudidayaViewState extends State<BudidayaView> {
               ],
             ),
           ),
-
           const SizedBox(width: 10),
-
           Expanded(
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Panen #${item.id}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: textColor,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: statusBackground,
+                        borderRadius: BorderRadius.circular(7),
+                      ),
+                      child: Text(
+                        statusLabel,
+                        style: TextStyle(
+                          color: statusColor,
+                          fontSize: 8,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 5),
                 Text(
-                  '${batch['name']} • ${batch['plant']}',
+                  details.join(' • '),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: textColor,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-
-                const SizedBox(height: 4),
-
-                Text(
-                  '${batch['holes']} lubang',
                   style: const TextStyle(color: mutedColor, fontSize: 9),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  timingLabel,
+                  style: TextStyle(
+                    color: statusColor,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ],
             ),
           ),
+          const SizedBox(width: 8),
+          const Icon(Icons.edit_outlined, color: primaryColor, size: 16),
+        ],
+      ),
+    );
+  }
 
-          Column(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                remaining >= 0
-                    ? '$remaining hari lagi'
-                    : 'Lewat ${remaining.abs()} hari',
-                style: const TextStyle(
-                  color: primaryColor,
-                  fontSize: 9,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
+  Widget _buildPanenLoadingState() {
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 34),
+      child: Center(child: CircularProgressIndicator(color: primaryColor)),
+    );
+  }
 
-              GestureDetector(
-                onTap: () {
-                  Navigator.pushNamed(context, '/panen/edit', arguments: batch);
-                },
-                child: const Icon(
-                  Icons.edit_outlined,
-                  color: primaryColor,
-                  size: 16,
-                ),
-              ),
-            ],
+  Widget _buildPanenErrorState(String message) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF6F3),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFF0D5CC)),
+      ),
+      child: Column(
+        children: [
+          const Icon(Icons.cloud_off_outlined, color: Color(0xFFB35D48)),
+          const SizedBox(height: 8),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: textColor, fontSize: 11),
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: () => _loadPanensForSelectedMonth(force: true),
+            icon: const Icon(Icons.refresh_rounded, size: 16),
+            label: const Text('Coba lagi'),
           ),
         ],
       ),
     );
   }
 
-  int _daysUntilHarvest(DateTime today, Map<String, dynamic> batch) {
-    return (batch['harvestDate'] as DateTime).difference(today).inDays;
+  Widget _buildPanenEmptyState() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 26),
+      decoration: BoxDecoration(
+        color: softColor,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: const Column(
+        children: [
+          Icon(Icons.event_available_outlined, color: primaryColor, size: 28),
+          SizedBox(height: 8),
+          Text(
+            'Belum ada data panen pada bulan ini.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: textColor,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          SizedBox(height: 4),
+          Text(
+            'Jadwal panen dari backend akan muncul di kalender ini.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: mutedColor, fontSize: 9),
+          ),
+        ],
+      ),
+    );
   }
+
+  Widget _buildPanenLoadMoreError() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        children: [
+          Text(
+            _panenController.loadMoreErrorMessage!,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: mutedColor, fontSize: 10),
+          ),
+          TextButton(
+            onPressed: () => _panenController.loadMorePanens(),
+            child: const Text(
+              'Coba muat lagi',
+              style: TextStyle(color: primaryColor, fontSize: 10),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPanenLoadMoreButton() {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton(
+        onPressed: () => _panenController.loadMorePanens(),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: primaryColor,
+          side: const BorderSide(color: primaryColor),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+        child: const Text('Muat lebih banyak'),
+      ),
+    );
+  }
+
+  DateTime _dateOnly(DateTime date) =>
+      DateTime(date.year, date.month, date.day);
 
   String _formatDate(DateTime date) {
     const months = [
@@ -888,9 +1365,7 @@ class _BudidayaViewState extends State<BudidayaView> {
       'Nov',
       'Des',
     ];
-
-    return '${date.day.toString().padLeft(2, '0')} '
-        '${months[date.month - 1]} ${date.year}';
+    return '${date.day.toString().padLeft(2, '0')} ${months[date.month - 1]} ${date.year}';
   }
 
   String _formatCalendarMonth(DateTime date) {
@@ -908,7 +1383,6 @@ class _BudidayaViewState extends State<BudidayaView> {
       'November',
       'Desember',
     ];
-
     return '${months[date.month - 1]} ${date.year}';
   }
 
@@ -927,7 +1401,6 @@ class _BudidayaViewState extends State<BudidayaView> {
       'NOV',
       'DES',
     ];
-
     return months[month - 1];
   }
 }

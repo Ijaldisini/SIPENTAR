@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 
+import '../../controllers/transaksi_keuangan/transaksi_keuangan_controller.dart';
+
 enum TransactionType { income, expense }
 
 class TransactionFormView extends StatefulWidget {
   final TransactionType initialType;
+  final TransaksiKeuanganController? controller;
 
   const TransactionFormView({
     super.key,
     this.initialType = TransactionType.income,
+    this.controller,
   });
 
   @override
@@ -20,58 +24,112 @@ class _TransactionFormViewState extends State<TransactionFormView> {
   static const Color textColor = Color(0xFF26351F);
   static const Color borderColor = Color(0xFFB7C4A5);
 
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+
+  late final TransaksiKeuanganController _controller;
+  late final bool _ownsController;
+
   late TransactionType selectedType;
-
   late TextEditingController amountController;
+  late TextEditingController percentageController;
   late TextEditingController descriptionController;
-
   late DateTime selectedDate;
-  late String selectedCategory;
 
   bool get isIncome => selectedType == TransactionType.income;
-
-  List<String> get categories {
-    return isIncome ? ['Penjualan hasil panen'] : ['Kas Operasional'];
-  }
 
   @override
   void initState() {
     super.initState();
 
+    _ownsController = widget.controller == null;
+    _controller = widget.controller ?? TransaksiKeuanganController();
+    _controller.addListener(_onControllerChanged);
+
     selectedType = widget.initialType;
-
+    selectedDate = DateTime.now();
     amountController = TextEditingController();
+    percentageController = TextEditingController(
+      text: widget.initialType == TransactionType.income ? '35' : '',
+    );
     descriptionController = TextEditingController();
-
-    _setTransactionData();
   }
 
-  void _setTransactionData() {
-    if (isIncome) {
-      amountController.text = '1.200.000';
-      descriptionController.text = 'Penjualan selada 120 lubang tanam.';
-
-      selectedDate = DateTime(2026, 11, 5);
-      selectedCategory = 'Penjualan hasil panen';
-    } else {
-      amountController.text = '450.000';
-      descriptionController.text = 'Pembelian nutrisi dan perawatan kebun.';
-
-      selectedDate = DateTime(2026, 11, 4);
-      selectedCategory = 'Kas Operasional';
-    }
+  void _onControllerChanged() {
+    if (mounted) setState(() {});
   }
 
   void _changeTransactionType(TransactionType type) {
+    if (selectedType == type) return;
+
     setState(() {
       selectedType = type;
-      _setTransactionData();
+      percentageController.text = type == TransactionType.income ? '35' : '';
     });
+    _controller.clearSubmitError();
+  }
+
+  double? _parseAmount(String value) {
+    var normalized = value.trim().replaceAll(RegExp(r'[^0-9,.-]'), '');
+    if (normalized.isEmpty) return null;
+
+    if (normalized.contains(',') && normalized.contains('.')) {
+      // Format Indonesia: 1.250.000,50
+      normalized = normalized.replaceAll('.', '').replaceAll(',', '.');
+    } else if (normalized.contains(',')) {
+      normalized = normalized.replaceAll(',', '.');
+    } else if (RegExp(r'^\d{1,3}(\.\d{3})+$').hasMatch(normalized)) {
+      // Format ribuan tanpa angka desimal: 1.250.000
+      normalized = normalized.replaceAll('.', '');
+    }
+
+    final result = double.tryParse(normalized);
+    if (result == null || !result.isFinite) return null;
+    return result;
+  }
+
+  double? _parsePercentage(String value) {
+    final result = double.tryParse(value.trim().replaceAll(',', '.'));
+    if (result == null || !result.isFinite) return null;
+    return result;
+  }
+
+  Future<void> _saveTransaction() async {
+    if (_controller.isSubmitting) return;
+    if (!_formKey.currentState!.validate()) return;
+
+    final amount = _parseAmount(amountController.text);
+    if (amount == null) return;
+
+    final percentage = isIncome
+        ? _parsePercentage(percentageController.text)
+        : null;
+
+    final saved = await _controller.createTransaksiKeuangan(
+      jenis: isIncome ? 'pemasukan' : 'pengeluaran',
+      tanggal: selectedDate,
+      jumlah: amount,
+      // panen_id bersifat opsional; belum ada pemilihan data panen di form ini.
+      panenId: null,
+      persentaseKas: percentage,
+      keterangan: descriptionController.text.trim().isEmpty
+          ? null
+          : descriptionController.text.trim(),
+    );
+
+    if (!mounted) return;
+
+    if (saved) {
+      Navigator.of(context).pop(true);
+    }
   }
 
   @override
   void dispose() {
+    _controller.removeListener(_onControllerChanged);
+    if (_ownsController) _controller.dispose();
+
     amountController.dispose();
+    percentageController.dispose();
     descriptionController.dispose();
     super.dispose();
   }
@@ -90,7 +148,6 @@ class _TransactionFormViewState extends State<TransactionFormView> {
             height: 160,
             child: _buildHeader(context),
           ),
-
           Positioned(
             top: 104,
             left: 0,
@@ -108,45 +165,45 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                       keyboardDismissBehavior:
                           ScrollViewKeyboardDismissBehavior.onDrag,
                       padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildTransactionSelector(),
-
-                          const SizedBox(height: 16),
-
-                          _buildNominalField(),
-
-                          const SizedBox(height: 16),
-
-                          _buildDateField(),
-
-                          const SizedBox(height: 16),
-
-                          _buildCategoryField(),
-
-                          const SizedBox(height: 16),
-
-                          _buildDescriptionField(),
-
-                          const SizedBox(height: 12),
-
-                          Text(
-                            'Transaksi akan masuk ke laporan '
-                            '${_getMonthName(selectedDate.month)} '
-                            '${selectedDate.year}.',
-                            style: const TextStyle(
-                              color: Color(0xFF70786B),
-                              fontSize: 11,
-                              fontWeight: FontWeight.w400,
+                      child: Form(
+                        key: _formKey,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildTransactionSelector(),
+                            const SizedBox(height: 16),
+                            _buildNominalField(),
+                            const SizedBox(height: 16),
+                            _buildDateField(),
+                            if (isIncome) ...[
+                              const SizedBox(height: 16),
+                              _buildAllocationField(),
+                            ],
+                            const SizedBox(height: 16),
+                            _buildDescriptionField(),
+                            const SizedBox(height: 12),
+                            Text(
+                              'Transaksi akan masuk ke laporan '
+                              '${_getMonthName(selectedDate.month)} '
+                              '${selectedDate.year}.',
+                              style: const TextStyle(
+                                color: Color(0xFF70786B),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w400,
+                              ),
                             ),
-                          ),
-                        ],
+                            if (_controller.submitErrorMessage != null) ...[
+                              const SizedBox(height: 14),
+                              _buildErrorMessage(
+                                _controller.submitErrorMessage!,
+                              ),
+                            ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
-
-                  _buildBottomButtons(context),
+                  _buildBottomButtons(),
                 ],
               ),
             ),
@@ -179,9 +236,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
               ),
             ),
           ),
-
           const SizedBox(width: 4),
-
           const Text(
             'Catat transaksi',
             style: TextStyle(
@@ -211,7 +266,6 @@ class _TransactionFormViewState extends State<TransactionFormView> {
               type: TransactionType.income,
             ),
           ),
-
           Expanded(
             child: _buildTransactionTab(
               title: 'Pengeluaran',
@@ -230,7 +284,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
     final isSelected = selectedType == type;
 
     return GestureDetector(
-      onTap: () => _changeTransactionType(type),
+      onTap: _controller.isSubmitting ? null : () => _changeTransactionType(type),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         alignment: Alignment.center,
@@ -251,47 +305,80 @@ class _TransactionFormViewState extends State<TransactionFormView> {
   }
 
   Widget _buildNominalField() {
-    return Container(
-      width: double.infinity,
-      height: 104,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: softColor,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Nominal (Rp)',
-            style: TextStyle(
-              color: Color(0xFF70786B),
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
+    return FormField<String>(
+      validator: (_) {
+        final amount = _parseAmount(amountController.text);
+        if (amount == null || amount <= 0) {
+          return 'Nominal transaksi harus lebih dari 0.';
+        }
+        return null;
+      },
+      builder: (fieldState) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: double.infinity,
+              height: 104,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: softColor,
+                borderRadius: BorderRadius.circular(16),
+                border: fieldState.hasError
+                    ? Border.all(color: const Color(0xFFAE4E3D))
+                    : null,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Nominal (Rp)',
+                    style: TextStyle(
+                      color: Color(0xFF70786B),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  Expanded(
+                    child: TextField(
+                      controller: amountController,
+                      enabled: !_controller.isSubmitting,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      onChanged: (_) {
+                        fieldState.didChange(amountController.text);
+                        _controller.clearSubmitError();
+                      },
+                      cursorColor: primaryColor,
+                      style: const TextStyle(
+                        color: textColor,
+                        fontSize: 32,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      decoration: const InputDecoration(
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.zero,
+                        isDense: true,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-
-          Expanded(
-            child: TextField(
-              controller: amountController,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
+            if (fieldState.hasError) ...[
+              const SizedBox(height: 5),
+              Text(
+                fieldState.errorText!,
+                style: const TextStyle(
+                  color: Color(0xFFAE4E3D),
+                  fontSize: 11,
+                ),
               ),
-              cursorColor: primaryColor,
-              style: const TextStyle(
-                color: textColor,
-                fontSize: 32,
-                fontWeight: FontWeight.w700,
-              ),
-              decoration: const InputDecoration(
-                border: InputBorder.none,
-                contentPadding: EdgeInsets.zero,
-                isDense: true,
-              ),
-            ),
-          ),
-        ],
-      ),
+            ],
+          ],
+        );
+      },
     );
   }
 
@@ -300,11 +387,9 @@ class _TransactionFormViewState extends State<TransactionFormView> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildLabel('Tanggal transaksi'),
-
         const SizedBox(height: 8),
-
         InkWell(
-          onTap: _selectDate,
+          onTap: _controller.isSubmitting ? null : _selectDate,
           borderRadius: BorderRadius.circular(16),
           child: Container(
             height: 56,
@@ -323,7 +408,6 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                   _formatDate(selectedDate),
                   style: const TextStyle(color: textColor, fontSize: 14),
                 ),
-
                 const Icon(
                   Icons.calendar_today_outlined,
                   size: 17,
@@ -342,7 +426,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
       context: context,
       initialDate: selectedDate,
       firstDate: DateTime(2020),
-      lastDate: DateTime(2035),
+      lastDate: DateTime(2100),
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
@@ -358,11 +442,119 @@ class _TransactionFormViewState extends State<TransactionFormView> {
       },
     );
 
-    if (result != null) {
-      setState(() {
-        selectedDate = result;
-      });
+    if (result != null && mounted) {
+      setState(() => selectedDate = result);
     }
+  }
+
+  Widget _buildAllocationField() {
+    return FormField<String>(
+      validator: (_) {
+        final percentage = _parsePercentage(percentageController.text);
+        if (percentage == null || percentage <= 0 || percentage > 100) {
+          return 'Persentase kas harus berupa angka antara 0 dan 100.';
+        }
+        return null;
+      },
+      builder: (fieldState) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildLabel('Persentase alokasi kas (%)'),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 56,
+              child: TextField(
+                controller: percentageController,
+                enabled: !_controller.isSubmitting,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                onChanged: (_) {
+                  fieldState.didChange(percentageController.text);
+                  _controller.clearSubmitError();
+                },
+                cursorColor: primaryColor,
+                style: const TextStyle(color: textColor, fontSize: 14),
+                decoration: _inputDecoration().copyWith(
+                  hintText: 'Contoh: 35',
+                  errorText: fieldState.errorText,
+                ),
+              ),
+            ),
+            const SizedBox(height: 5),
+            const Text(
+              'Batas persentase mengikuti pengaturan backend.',
+              style: TextStyle(
+                color: Color(0xFF70786B),
+                fontSize: 10,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildDescriptionField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildLabel('Keterangan (opsional)'),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 68,
+          child: TextField(
+            controller: descriptionController,
+            enabled: !_controller.isSubmitting,
+            maxLines: 2,
+            maxLength: 255,
+            cursorColor: primaryColor,
+            onChanged: (_) => _controller.clearSubmitError(),
+            style: const TextStyle(color: textColor, fontSize: 14),
+            decoration: _inputDecoration().copyWith(
+              counterText: '',
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 14,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildErrorMessage(String message) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF0EE),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.error_outline_rounded,
+            color: Color(0xFFAE4E3D),
+            size: 18,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(
+                color: Color(0xFFAE4E3D),
+                fontSize: 11,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   String _formatDate(DateTime date) {
@@ -385,73 +577,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
       'November',
       'Desember',
     ];
-
     return months[month - 1];
-  }
-
-  Widget _buildCategoryField() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildLabel('Kategori'),
-
-        const SizedBox(height: 8),
-
-        SizedBox(
-          height: 56,
-          child: DropdownButtonFormField<String>(
-            initialValue: selectedCategory,
-            isExpanded: true,
-            icon: const Icon(
-              Icons.keyboard_arrow_down_rounded,
-              color: primaryColor,
-            ),
-            style: const TextStyle(color: textColor, fontSize: 14),
-            decoration: _inputDecoration(),
-            items: categories.map((category) {
-              return DropdownMenuItem<String>(
-                value: category,
-                child: Text(category),
-              );
-            }).toList(),
-            onChanged: (value) {
-              if (value == null) return;
-
-              setState(() {
-                selectedCategory = value;
-              });
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildDescriptionField() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildLabel('Keterangan'),
-
-        const SizedBox(height: 8),
-
-        SizedBox(
-          height: 68,
-          child: TextField(
-            controller: descriptionController,
-            maxLines: 2,
-            cursorColor: primaryColor,
-            style: const TextStyle(color: textColor, fontSize: 14),
-            decoration: _inputDecoration().copyWith(
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 14,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
   }
 
   Widget _buildLabel(String label) {
@@ -478,10 +604,14 @@ class _TransactionFormViewState extends State<TransactionFormView> {
         borderSide: const BorderSide(color: primaryColor, width: 1.5),
         borderRadius: BorderRadius.circular(16),
       ),
+      border: OutlineInputBorder(
+        borderSide: const BorderSide(color: borderColor),
+        borderRadius: BorderRadius.circular(16),
+      ),
     );
   }
 
-  Widget _buildBottomButtons(BuildContext context) {
+  Widget _buildBottomButtons() {
     return SafeArea(
       top: false,
       child: Padding(
@@ -492,7 +622,9 @@ class _TransactionFormViewState extends State<TransactionFormView> {
               child: SizedBox(
                 height: 56,
                 child: OutlinedButton(
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: _controller.isSubmitting
+                      ? null
+                      : () => Navigator.pop(context),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: primaryColor,
                     side: const BorderSide(color: primaryColor, width: 1),
@@ -507,34 +639,37 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                 ),
               ),
             ),
-
             const SizedBox(width: 10),
-
             Expanded(
               child: SizedBox(
                 height: 56,
                 child: ElevatedButton(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'Transaksi masih menggunakan data dummy.',
-                        ),
-                      ),
-                    );
-                  },
+                  onPressed: _controller.isSubmitting ? null : _saveTransaction,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: primaryColor,
                     foregroundColor: Colors.white,
+                    disabledBackgroundColor: primaryColor.withValues(alpha: 0.65),
                     elevation: 0,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
                     ),
                   ),
-                  child: const Text(
-                    'Simpan',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                  ),
+                  child: _controller.isSubmitting
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Text(
+                          'Simpan',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                 ),
               ),
             ),

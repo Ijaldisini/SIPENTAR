@@ -1,10 +1,17 @@
 import 'package:flutter/material.dart';
 
-class StockFormView extends StatefulWidget {
-  final bool isEdit;
-  final Map<String, String>? initialData;
+import '../../controllers/stok/stok_controller.dart';
+import '../../models/stok/stok_model.dart';
 
-  const StockFormView({super.key, this.isEdit = false, this.initialData});
+class StockFormView extends StatefulWidget {
+  final StokController stokController;
+  final StokModel? stok;
+
+  const StockFormView({
+    super.key,
+    required this.stokController,
+    this.stok,
+  });
 
   @override
   State<StockFormView> createState() => _StockFormViewState();
@@ -16,92 +23,154 @@ class _StockFormViewState extends State<StockFormView> {
   static const Color borderColor = Color(0xFFB7C4A5);
 
   final List<String> categories = ['Nutrisi', 'Media tanam', 'Benih'];
-
   final List<String> units = ['Liter', 'Lembar', 'Pak'];
 
-  late TextEditingController nameController;
-  late TextEditingController quantityController;
-  late TextEditingController minimumController;
-  late TextEditingController notesController;
+  late final TextEditingController nameController;
+  late final TextEditingController quantityController;
+  late final TextEditingController minimumController;
 
   late String selectedCategory;
   late String selectedUnit;
+
+  bool get isEdit => widget.stok != null;
+
+  double get quantityValue => _parseNumber(quantityController.text) ?? 0;
+  double get minimumValue => _parseNumber(minimumController.text) ?? 0;
+  bool get isBelowMinimum => quantityValue <= minimumValue;
 
   @override
   void initState() {
     super.initState();
 
-    final data =
-        widget.initialData ??
-        (widget.isEdit
-            ? {
-                'name': 'Nutrisi AB Mix',
-                'category': 'Nutrisi',
-                'quantity': '2 Liter',
-                'minimum': 'Batas min. 5 liter',
-                'notes': 'Nutrisi untuk selada hidroponik.',
-              }
-            : {
-                'name': 'Benih pakcoy',
-                'category': 'Benih',
-                'quantity': '20 Pak',
-                'minimum': 'Batas min. 5 pak',
-                'notes': 'Benih pakcoy untuk siklus tanam berikutnya.',
-              });
+    final stok = widget.stok;
 
-    nameController = TextEditingController(text: data['name'] ?? '');
+    if (stok != null && !categories.contains(stok.kategori)) {
+      categories.add(stok.kategori);
+    }
 
+    if (stok != null && !units.contains(stok.satuan)) {
+      units.add(stok.satuan);
+    }
+
+    nameController = TextEditingController(text: stok?.namaBahan ?? '');
     quantityController = TextEditingController(
-      text: _extractNumber(data['quantity'] ?? '20'),
+      text: stok == null ? '' : _formatNumber(stok.jumlahStok),
     );
-
     minimumController = TextEditingController(
-      text: _extractNumber(data['minimum'] ?? '5'),
+      text: stok == null ? '' : _formatNumber(stok.batasMinimum),
     );
 
-    notesController = TextEditingController(text: data['notes'] ?? '');
+    selectedCategory = stok?.kategori ?? categories.first;
+    selectedUnit = stok?.satuan ?? units.last;
 
-    selectedCategory = categories.contains(data['category'])
-        ? data['category']!
-        : categories.last;
-
-    selectedUnit = _extractUnit(data['quantity'] ?? '');
+    widget.stokController.addListener(_onControllerChanged);
   }
 
-  String _extractNumber(String value) {
-    final match = RegExp(r'\d+(?:[.,]\d+)?').firstMatch(value);
-    return match?.group(0) ?? '0';
+  @override
+  void didUpdateWidget(covariant StockFormView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.stokController != widget.stokController) {
+      oldWidget.stokController.removeListener(_onControllerChanged);
+      widget.stokController.addListener(_onControllerChanged);
+    }
   }
 
-  String _extractUnit(String value) {
-    final normalized = value.toLowerCase();
-
-    if (normalized.contains('liter')) return 'Liter';
-    if (normalized.contains('lembar')) return 'Lembar';
-    if (normalized.contains('pak')) return 'Pak';
-
-    return 'Pak';
-  }
-
-  double get quantityValue {
-    return double.tryParse(quantityController.text.replaceAll(',', '.')) ?? 0;
-  }
-
-  double get minimumValue {
-    return double.tryParse(minimumController.text.replaceAll(',', '.')) ?? 0;
-  }
-
-  bool get isBelowMinimum {
-    return quantityValue <= minimumValue;
+  void _onControllerChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
+    widget.stokController.removeListener(_onControllerChanged);
     nameController.dispose();
     quantityController.dispose();
     minimumController.dispose();
-    notesController.dispose();
     super.dispose();
+  }
+
+  double? _parseNumber(String value) {
+    final normalized = value.trim().replaceAll(',', '.');
+    final parsed = double.tryParse(normalized);
+
+    if (parsed == null || !parsed.isFinite || parsed < 0) {
+      return null;
+    }
+
+    return parsed;
+  }
+
+  String _formatNumber(double value) {
+    if (value == value.roundToDouble()) {
+      return value.toStringAsFixed(0);
+    }
+
+    return value
+        .toStringAsFixed(2)
+        .replaceAll(RegExp(r'0+$'), '')
+        .replaceAll(RegExp(r'\.$'), '');
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _saveStock() async {
+    if (widget.stokController.isSubmitting) return;
+
+    final namaBahan = nameController.text.trim();
+    final jumlahStok = _parseNumber(quantityController.text);
+    final batasMinimum = _parseNumber(minimumController.text);
+
+    if (namaBahan.isEmpty) {
+      _showMessage('Nama stok wajib diisi.');
+      return;
+    }
+
+    if (jumlahStok == null) {
+      _showMessage('Jumlah tersedia harus berupa angka nol atau lebih.');
+      return;
+    }
+
+    if (batasMinimum == null) {
+      _showMessage('Batas minimum harus berupa angka nol atau lebih.');
+      return;
+    }
+
+    widget.stokController.clearError();
+
+    if (isEdit) {
+      await widget.stokController.updateStok(
+        id: widget.stok!.id,
+        namaBahan: namaBahan,
+        kategori: selectedCategory,
+        satuan: selectedUnit,
+        jumlahStok: jumlahStok,
+        batasMinimum: batasMinimum,
+      );
+    } else {
+      await widget.stokController.createStok(
+        namaBahan: namaBahan,
+        kategori: selectedCategory,
+        satuan: selectedUnit,
+        jumlahStok: jumlahStok,
+        batasMinimum: batasMinimum,
+      );
+    }
+
+    if (!mounted) return;
+
+    final errorMessage = widget.stokController.submitErrorMessage;
+    if (errorMessage != null && errorMessage.trim().isNotEmpty) {
+      _showMessage(errorMessage);
+      return;
+    }
+
+    Navigator.of(context).pop(true);
   }
 
   @override
@@ -118,7 +187,6 @@ class _StockFormViewState extends State<StockFormView> {
             height: 160,
             child: _buildHeader(context),
           ),
-
           Positioned(
             top: 104,
             left: 0,
@@ -142,25 +210,19 @@ class _StockFormViewState extends State<StockFormView> {
                           _buildTextField(
                             label: 'Nama stok',
                             controller: nameController,
+                            textCapitalization: TextCapitalization.words,
                           ),
-
                           const SizedBox(height: 16),
-
                           _buildDropdownField(
                             label: 'Kategori',
                             value: selectedCategory,
                             items: categories,
                             onChanged: (value) {
                               if (value == null) return;
-
-                              setState(() {
-                                selectedCategory = value;
-                              });
+                              setState(() => selectedCategory = value);
                             },
                           ),
-
                           const SizedBox(height: 16),
-
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -175,9 +237,7 @@ class _StockFormViewState extends State<StockFormView> {
                                   onChanged: (_) => setState(() {}),
                                 ),
                               ),
-
                               const SizedBox(width: 14),
-
                               Expanded(
                                 child: _buildDropdownField(
                                   label: 'Satuan',
@@ -185,18 +245,13 @@ class _StockFormViewState extends State<StockFormView> {
                                   items: units,
                                   onChanged: (value) {
                                     if (value == null) return;
-
-                                    setState(() {
-                                      selectedUnit = value;
-                                    });
+                                    setState(() => selectedUnit = value);
                                   },
                                 ),
                               ),
                             ],
                           ),
-
                           const SizedBox(height: 16),
-
                           _buildTextField(
                             label: 'Batas minimum stok',
                             controller: minimumController,
@@ -205,19 +260,12 @@ class _StockFormViewState extends State<StockFormView> {
                             ),
                             onChanged: (_) => setState(() {}),
                           ),
-
                           const SizedBox(height: 16),
-
-                          _buildNotesField(),
-
-                          const SizedBox(height: 16),
-
                           _buildStockNotice(),
                         ],
                       ),
                     ),
                   ),
-
                   _buildBottomButtons(context),
                 ],
               ),
@@ -240,9 +288,7 @@ class _StockFormViewState extends State<StockFormView> {
       child: Row(
         children: [
           InkWell(
-            onTap: () {
-              Navigator.pop(context);
-            },
+            onTap: () => Navigator.pop(context),
             borderRadius: BorderRadius.circular(50),
             child: const Padding(
               padding: EdgeInsets.only(right: 12, top: 4, bottom: 4),
@@ -253,11 +299,9 @@ class _StockFormViewState extends State<StockFormView> {
               ),
             ),
           ),
-
           const SizedBox(width: 4),
-
           Text(
-            widget.isEdit ? 'Edit stok' : 'Tambah stok',
+            isEdit ? 'Edit stok' : 'Tambah stok',
             style: const TextStyle(
               color: Colors.white,
               fontSize: 24,
@@ -273,20 +317,20 @@ class _StockFormViewState extends State<StockFormView> {
     required String label,
     required TextEditingController controller,
     TextInputType? keyboardType,
+    TextCapitalization textCapitalization = TextCapitalization.none,
     ValueChanged<String>? onChanged,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildLabel(label),
-
         const SizedBox(height: 8),
-
         SizedBox(
           height: 56,
           child: TextField(
             controller: controller,
             keyboardType: keyboardType,
+            textCapitalization: textCapitalization,
             onChanged: onChanged,
             textAlignVertical: TextAlignVertical.center,
             cursorColor: primaryColor,
@@ -312,9 +356,7 @@ class _StockFormViewState extends State<StockFormView> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildLabel(label),
-
         const SizedBox(height: 8),
-
         SizedBox(
           height: 56,
           child: DropdownButtonFormField<String>(
@@ -331,38 +373,15 @@ class _StockFormViewState extends State<StockFormView> {
               fontSize: 14,
               fontWeight: FontWeight.w400,
             ),
-            items: items.map((item) {
-              return DropdownMenuItem<String>(value: item, child: Text(item));
-            }).toList(),
+            items: items
+                .map(
+                  (item) => DropdownMenuItem<String>(
+                    value: item,
+                    child: Text(item),
+                  ),
+                )
+                .toList(),
             onChanged: onChanged,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildNotesField() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildLabel('Catatan (opsional)'),
-
-        const SizedBox(height: 8),
-
-        SizedBox(
-          height: 68,
-          child: TextField(
-            controller: notesController,
-            maxLines: 2,
-            textAlignVertical: TextAlignVertical.top,
-            cursorColor: primaryColor,
-            style: const TextStyle(color: textColor, fontSize: 14),
-            decoration: _inputDecoration().copyWith(
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 14,
-                vertical: 13,
-              ),
-            ),
           ),
         ),
       ],
@@ -407,18 +426,13 @@ class _StockFormViewState extends State<StockFormView> {
     final backgroundColor = isLow
         ? const Color(0xFFFFF5DF)
         : const Color(0xFFF1F5E9);
-
     final noticeColor = isLow ? const Color(0xFF8C5B16) : primaryColor;
-
     final title = isLow
         ? 'Stok berada di bawah batas minimum'
         : 'Notifikasi stok otomatis';
-
     final description = isLow
-        ? 'Tersedia ${quantityController.text} $unit dari batas minimum '
-              '${minimumController.text} $unit. Segera lakukan pengadaan.'
-        : 'Peringatan muncul saat jumlah tersedia mencapai atau di '
-              'bawah ${minimumController.text} $unit.';
+        ? 'Tersedia ${quantityController.text.isEmpty ? '0' : quantityController.text} $unit dari batas minimum ${minimumController.text.isEmpty ? '0' : minimumController.text} $unit. Segera lakukan pengadaan.'
+        : 'Peringatan muncul saat jumlah tersedia mencapai atau di bawah ${minimumController.text.isEmpty ? '0' : minimumController.text} $unit.';
 
     return Container(
       width: double.infinity,
@@ -430,14 +444,8 @@ class _StockFormViewState extends State<StockFormView> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            isLow ? Icons.info_outline_rounded : Icons.info_outline_rounded,
-            color: noticeColor,
-            size: 20,
-          ),
-
+          Icon(Icons.info_outline_rounded, color: noticeColor, size: 20),
           const SizedBox(width: 12),
-
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -450,9 +458,7 @@ class _StockFormViewState extends State<StockFormView> {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-
                 const SizedBox(height: 4),
-
                 Text(
                   description,
                   style: TextStyle(
@@ -471,6 +477,8 @@ class _StockFormViewState extends State<StockFormView> {
   }
 
   Widget _buildBottomButtons(BuildContext context) {
+    final isSubmitting = widget.stokController.isSubmitting;
+
     return SafeArea(
       top: false,
       child: Padding(
@@ -481,9 +489,7 @@ class _StockFormViewState extends State<StockFormView> {
               child: SizedBox(
                 height: 56,
                 child: OutlinedButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                  },
+                  onPressed: isSubmitting ? null : () => Navigator.pop(context),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: primaryColor,
                     side: const BorderSide(color: primaryColor, width: 1),
@@ -498,36 +504,37 @@ class _StockFormViewState extends State<StockFormView> {
                 ),
               ),
             ),
-
             const SizedBox(width: 10),
-
             Expanded(
               child: SizedBox(
                 height: 56,
                 child: ElevatedButton(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          widget.isEdit
-                              ? 'Fitur simpan perubahan masih dummy.'
-                              : 'Fitur simpan stok masih dummy.',
-                        ),
-                      ),
-                    );
-                  },
+                  onPressed: isSubmitting ? null : _saveStock,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: primaryColor,
                     foregroundColor: Colors.white,
+                    disabledBackgroundColor: primaryColor.withValues(alpha: 0.6),
                     elevation: 0,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
                     ),
                   ),
-                  child: const Text(
-                    'Simpan',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                  ),
+                  child: isSubmitting
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Text(
+                          'Simpan',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                 ),
               ),
             ),

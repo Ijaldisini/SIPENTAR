@@ -1,5 +1,12 @@
 import 'package:flutter/material.dart';
 
+import '../../controllers/budidaya/budidaya_controller.dart';
+import '../../controllers/panen/panen_controller.dart';
+import '../../models/budidaya/budidaya_model.dart';
+import '../../models/panen/panen_model.dart';
+
+/// Form tambah jadwal/hasil panen.
+/// Payload dibatasi pada field yang diterima endpoint POST /panen.
 class TambahRotasiPanenView extends StatefulWidget {
   const TambahRotasiPanenView({super.key});
 
@@ -14,91 +21,177 @@ class _TambahRotasiPanenViewState extends State<TambahRotasiPanenView> {
   static const Color mutedColor = Color(0xFF70786B);
   static const Color borderColor = Color(0xFFB7C4A5);
 
-  final DateTime referenceDate = DateTime(2026, 11, 5);
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  final TextEditingController _beratController = TextEditingController();
+  late final BudidayaController _budidayaController;
+  late final PanenController _panenController;
 
-  final TextEditingController holesController = TextEditingController(
-    text: '12',
-  );
+  int? _selectedBudidayaId;
+  DateTime _tanggalPanen = DateTime.now();
+  String _status = PanenModel.statusTerjadwal;
+  bool _isLoadingOptions = false;
+  String? _localErrorMessage;
 
-  final TextEditingController noteController = TextEditingController(
-    text:
-        'Rotasi berikutnya setelah Batch 05. '
-        'Panen seluruh lubang pada Meja D1.',
-  );
+  List<BudidayaModel> get _budidayaOptions => _budidayaController.budidayas
+      .where((item) => item.status == BudidayaModel.statusBerjalan)
+      .toList(growable: false);
 
-  final GlobalKey<FormState> formKey = GlobalKey<FormState>();
-
-  final List<Map<String, dynamic>> availableBatches = [
-    {
-      'id': '03',
-      'name': 'Batch 03',
-      'plant': 'Selada',
-      'sowingDate': DateTime(2026, 10, 5),
-      'location': 'Meja A1',
-      'holes': 24,
-    },
-    {
-      'id': '04',
-      'name': 'Batch 04',
-      'plant': 'Selada hijau',
-      'sowingDate': DateTime(2026, 10, 18),
-      'location': 'Meja B1',
-      'holes': 12,
-    },
-    {
-      'id': '05',
-      'name': 'Batch 05',
-      'plant': 'Selada',
-      'sowingDate': DateTime(2026, 10, 25),
-      'location': 'Meja C1',
-      'holes': 12,
-    },
-    {
-      'id': '06',
-      'name': 'Batch 06',
-      'plant': 'Selada',
-      'sowingDate': DateTime(2026, 11, 5),
-      'location': 'Meja D1',
-      'holes': 12,
-    },
-  ];
-
-  late Map<String, dynamic> selectedBatch;
-
-  late DateTime selectedHarvestDate;
+  BudidayaModel? get _selectedBudidaya {
+    for (final item in _budidayaOptions) {
+      if (item.id == _selectedBudidayaId) {
+        return item;
+      }
+    }
+    return null;
+  }
 
   @override
   void initState() {
     super.initState();
-
-    selectedBatch = availableBatches.last;
-
-    selectedHarvestDate = DateTime(2026, 12, 10);
-  }
-
-  int get currentHss {
-    final sowingDate = selectedBatch['sowingDate'] as DateTime;
-
-    final difference = referenceDate.difference(sowingDate).inDays;
-
-    return difference < 0 ? 0 : difference;
-  }
-
-  int get harvestHss {
-    final sowingDate = selectedBatch['sowingDate'] as DateTime;
-
-    return selectedHarvestDate.difference(sowingDate).inDays;
-  }
-
-  int get harvestHoles {
-    return int.tryParse(holesController.text) ?? 0;
+    _budidayaController = BudidayaController();
+    _panenController = PanenController();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadBudidayaOptions());
   }
 
   @override
   void dispose() {
-    holesController.dispose();
-    noteController.dispose();
+    _beratController.dispose();
+    _budidayaController.dispose();
+    _panenController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadBudidayaOptions() async {
+    if (_isLoadingOptions) {
+      return;
+    }
+    setState(() {
+      _isLoadingOptions = true;
+      _localErrorMessage = null;
+    });
+
+    var loaded = await _budidayaController.loadBudidayas(
+      status: BudidayaModel.statusBerjalan,
+      perPage: 100,
+    );
+
+    while (loaded && _budidayaController.hasMoreBudidayas) {
+      loaded = await _budidayaController.loadMoreBudidayas();
+    }
+
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _isLoadingOptions = false;
+      if (_selectedBudidayaId == null && _budidayaOptions.isNotEmpty) {
+        _selectedBudidayaId = _budidayaOptions.first.id;
+      }
+      if (!loaded) {
+        _localErrorMessage =
+            _budidayaController.errorMessage ??
+            _budidayaController.loadMoreErrorMessage ??
+            'Daftar budidaya berjalan gagal dimuat.';
+      }
+      final selected = _selectedBudidaya;
+      if (selected != null &&
+          _dateOnly(_tanggalPanen).isBefore(_dateOnly(selected.tanggalSemai))) {
+        _tanggalPanen = _dateOnly(selected.tanggalSemai);
+      }
+    });
+  }
+
+  Future<void> _selectBudidaya(int? value) async {
+    if (value == null) {
+      return;
+    }
+    setState(() {
+      _selectedBudidayaId = value;
+      _localErrorMessage = null;
+      final selected = _selectedBudidaya;
+      if (selected != null &&
+          _dateOnly(_tanggalPanen).isBefore(_dateOnly(selected.tanggalSemai))) {
+        _tanggalPanen = _dateOnly(selected.tanggalSemai);
+      }
+    });
+  }
+
+  Future<void> _selectTanggalPanen() async {
+    final budidaya = _selectedBudidaya;
+    if (budidaya == null) {
+      return;
+    }
+
+    final firstDate = _dateOnly(budidaya.tanggalSemai);
+    final selectedDate = _dateOnly(_tanggalPanen);
+    final initialDate = selectedDate.isBefore(firstDate)
+        ? firstDate
+        : selectedDate;
+
+    final result = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: firstDate,
+      lastDate: DateTime(2100, 12, 31),
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: const ColorScheme.light(
+            primary: primaryColor,
+            onPrimary: Colors.white,
+            surface: Colors.white,
+            onSurface: textColor,
+          ),
+        ),
+        child: child ?? const SizedBox.shrink(),
+      ),
+    );
+
+    if (result != null && mounted) {
+      setState(() => _tanggalPanen = _dateOnly(result));
+    }
+  }
+
+  Future<void> _submit() async {
+    FocusScope.of(context).unfocus();
+    setState(() => _localErrorMessage = null);
+
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+    final budidaya = _selectedBudidaya;
+    if (budidaya == null) {
+      setState(
+        () => _localErrorMessage = 'Pilih budidaya yang masih berjalan.',
+      );
+      return;
+    }
+    if (_dateOnly(_tanggalPanen).isBefore(_dateOnly(budidaya.tanggalSemai))) {
+      setState(
+        () => _localErrorMessage =
+            'Tanggal panen tidak boleh sebelum tanggal semai.',
+      );
+      return;
+    }
+
+    final berat = _status == PanenModel.statusSelesai
+        ? double.tryParse(_beratController.text.trim().replaceAll(',', '.'))
+        : null;
+
+    final success = await _panenController.createPanen(
+      budidayaId: budidaya.id,
+      tanggalPanen: _dateOnly(_tanggalPanen),
+      status: _status,
+      beratKg: berat,
+    );
+
+    if (!mounted) {
+      return;
+    }
+    if (success) {
+      Navigator.pop(context, true);
+    } else {
+      setState(() {});
+    }
   }
 
   @override
@@ -113,9 +206,8 @@ class _TambahRotasiPanenViewState extends State<TambahRotasiPanenView> {
             left: 0,
             right: 0,
             height: 160,
-            child: _buildHeader(context),
+            child: _buildHeader(),
           ),
-
           Positioned(
             top: 104,
             left: 0,
@@ -127,7 +219,7 @@ class _TambahRotasiPanenViewState extends State<TambahRotasiPanenView> {
                 borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
               ),
               child: Form(
-                key: formKey,
+                key: _formKey,
                 child: Column(
                   children: [
                     Expanded(
@@ -138,42 +230,31 @@ class _TambahRotasiPanenViewState extends State<TambahRotasiPanenView> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            _buildBatchDropdown(),
-
+                            _buildBudidayaField(),
+                            const SizedBox(height: 18),
+                            _buildTanggalField(),
+                            const SizedBox(height: 18),
+                            _buildStatusField(),
+                            if (_status == PanenModel.statusSelesai) ...[
+                              const SizedBox(height: 18),
+                              _buildBeratField(),
+                            ],
                             const SizedBox(height: 16),
-
-                            _buildBatchInformation(),
-
-                            const SizedBox(height: 16),
-
-                            _buildHarvestDateField(),
-
-                            const SizedBox(height: 16),
-
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(child: _buildHssField()),
-
-                                const SizedBox(width: 14),
-
-                                Expanded(child: _buildHolesField()),
-                              ],
-                            ),
-
-                            const SizedBox(height: 16),
-
-                            _buildNoteField(),
-
-                            const SizedBox(height: 16),
-
-                            _buildSchedulePreview(),
+                            _buildInfoCard(),
+                            if (_localErrorMessage != null ||
+                                _panenController.submitErrorMessage !=
+                                    null) ...[
+                              const SizedBox(height: 14),
+                              _buildErrorCard(
+                                _localErrorMessage ??
+                                    _panenController.submitErrorMessage!,
+                              ),
+                            ],
                           ],
                         ),
                       ),
                     ),
-
-                    _buildBottomButtons(context),
+                    _buildBottomButtons(),
                   ],
                 ),
               ),
@@ -184,7 +265,7 @@ class _TambahRotasiPanenViewState extends State<TambahRotasiPanenView> {
     );
   }
 
-  Widget _buildHeader(BuildContext context) {
+  Widget _buildHeader() {
     return Container(
       color: primaryColor,
       padding: EdgeInsets.fromLTRB(
@@ -207,15 +288,15 @@ class _TambahRotasiPanenViewState extends State<TambahRotasiPanenView> {
               ),
             ),
           ),
-
           const SizedBox(width: 4),
-
-          const Text(
-            'Tambah rotasi panen',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.w700,
+          const Expanded(
+            child: Text(
+              'Tambah data panen',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 24,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         ],
@@ -223,24 +304,25 @@ class _TambahRotasiPanenViewState extends State<TambahRotasiPanenView> {
     );
   }
 
-  Widget _buildLabel(String label) {
-    return Text(
-      label,
-      style: const TextStyle(
-        color: textColor,
-        fontSize: 13,
-        fontWeight: FontWeight.w600,
-      ),
-    );
-  }
+  Widget _buildLabel(String value) => Text(
+    value,
+    style: const TextStyle(
+      color: textColor,
+      fontSize: 13,
+      fontWeight: FontWeight.w600,
+    ),
+  );
 
-  InputDecoration _inputDecoration() {
+  InputDecoration _inputDecoration({String? hintText, String? suffixText}) {
     return InputDecoration(
       filled: true,
       fillColor: Colors.white,
+      hintText: hintText,
+      suffixText: suffixText,
+      hintStyle: const TextStyle(color: mutedColor, fontSize: 13),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       enabledBorder: OutlineInputBorder(
-        borderSide: const BorderSide(color: borderColor, width: 1),
+        borderSide: const BorderSide(color: borderColor),
         borderRadius: BorderRadius.circular(16),
       ),
       focusedBorder: OutlineInputBorder(
@@ -258,120 +340,96 @@ class _TambahRotasiPanenViewState extends State<TambahRotasiPanenView> {
     );
   }
 
-  Widget _buildBatchDropdown() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildLabel('Pilih batch budidaya'),
+  Widget _buildBudidayaField() {
+    return AnimatedBuilder(
+      animation: _budidayaController,
+      builder: (context, _) {
+        final options = _budidayaOptions;
+        final selectedExists = options.any(
+          (item) => item.id == _selectedBudidayaId,
+        );
 
-        const SizedBox(height: 8),
-
-        SizedBox(
-          height: 56,
-          child: DropdownButtonFormField<String>(
-            initialValue: selectedBatch['id'] as String,
-            isExpanded: true,
-            icon: const Icon(
-              Icons.keyboard_arrow_down_rounded,
-              color: primaryColor,
-            ),
-            decoration: _inputDecoration(),
-            style: const TextStyle(color: textColor, fontSize: 14),
-            items: availableBatches.map((batch) {
-              final value = '${batch['name']} • ${batch['plant']}';
-
-              return DropdownMenuItem<String>(
-                value: batch['id'] as String,
-                child: Text(value, overflow: TextOverflow.ellipsis),
-              );
-            }).toList(),
-            onChanged: (value) {
-              if (value == null) return;
-
-              setState(() {
-                selectedBatch = availableBatches.firstWhere(
-                  (batch) => batch['id'] == value,
-                );
-
-                holesController.text = selectedBatch['holes'].toString();
-
-                selectedHarvestDate = (selectedBatch['sowingDate'] as DateTime)
-                    .add(const Duration(days: 35));
-              });
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildBatchInformation() {
-    final sowingDate = selectedBatch['sowingDate'] as DateTime;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: softColor,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Semai ${_formatShortDate(sowingDate)}',
-            style: const TextStyle(
-              color: textColor,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-
-          const SizedBox(height: 4),
-
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '${selectedBatch['location']} • '
-                  '${selectedBatch['holes']} lubang tanam',
-                  style: const TextStyle(color: mutedColor, fontSize: 11),
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildLabel('Budidaya berjalan'),
+            const SizedBox(height: 8),
+            if (_isLoadingOptions ||
+                _budidayaController.isLoading ||
+                _budidayaController.isLoadingMore)
+              _buildLoadingField('Memuat data budidaya...')
+            else if (_localErrorMessage != null && options.isEmpty)
+              _buildRetryField(_localErrorMessage!)
+            else if (options.isEmpty)
+              _buildEmptyField(
+                'Belum ada budidaya berstatus berjalan. Tambahkan data semai terlebih dahulu.',
+              )
+            else
+              Container(
+                height: 58,
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border.all(color: borderColor),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<int>(
+                    value: selectedExists ? _selectedBudidayaId : null,
+                    isExpanded: true,
+                    hint: const Text('Pilih budidaya'),
+                    icon: const Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      color: primaryColor,
+                    ),
+                    items: options.map((item) {
+                      final mejaNumber = item.meja?.nomorMeja;
+                      return DropdownMenuItem<int>(
+                        value: item.id,
+                        child: Text(
+                          'Budidaya #${item.id} • ${mejaNumber == null ? 'Meja ${item.mejaId}' : 'Meja $mejaNumber'} • ${item.jumlahTanaman} tanaman',
+                          style: const TextStyle(
+                            color: textColor,
+                            fontSize: 12,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: _selectBudidaya,
+                  ),
                 ),
               ),
-
+            if (_selectedBudidaya != null) ...[
+              const SizedBox(height: 6),
               Text(
-                '$currentHss HSS hari ini',
-                textAlign: TextAlign.right,
-                style: const TextStyle(
-                  color: primaryColor,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                ),
+                'Tanggal semai: ${_formatDate(_selectedBudidaya!.tanggalSemai)}',
+                style: const TextStyle(color: mutedColor, fontSize: 10),
               ),
             ],
-          ),
-        ],
-      ),
+          ],
+        );
+      },
     );
   }
 
-  Widget _buildHarvestDateField() {
+  Widget _buildTanggalField() {
+    final selected = _selectedBudidaya;
+    final enabled = selected != null && !_isLoadingOptions;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildLabel('Tanggal rencana panen'),
-
+        _buildLabel('Tanggal panen'),
         const SizedBox(height: 8),
-
         InkWell(
-          onTap: _selectHarvestDate,
+          onTap: enabled ? _selectTanggalPanen : null,
           borderRadius: BorderRadius.circular(16),
           child: Container(
-            width: double.infinity,
             height: 56,
+            width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 16),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: enabled ? Colors.white : const Color(0xFFF7F8F5),
               border: Border.all(color: borderColor),
               borderRadius: BorderRadius.circular(16),
             ),
@@ -379,10 +437,9 @@ class _TambahRotasiPanenViewState extends State<TambahRotasiPanenView> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  _formatLongDate(selectedHarvestDate),
+                  _formatDate(_tanggalPanen),
                   style: const TextStyle(color: textColor, fontSize: 14),
                 ),
-
                 const Icon(
                   Icons.calendar_month_outlined,
                   color: primaryColor,
@@ -392,63 +449,60 @@ class _TambahRotasiPanenViewState extends State<TambahRotasiPanenView> {
             ),
           ),
         ),
+        if (selected != null) ...[
+          const SizedBox(height: 6),
+          const Text(
+            'Tanggal tidak boleh lebih awal dari tanggal semai.',
+            style: TextStyle(color: mutedColor, fontSize: 10),
+          ),
+        ],
       ],
     );
   }
 
-  Future<void> _selectHarvestDate() async {
-    final sowingDate = selectedBatch['sowingDate'] as DateTime;
-
-    final result = await showDatePicker(
-      context: context,
-      initialDate: selectedHarvestDate,
-      firstDate: sowingDate,
-      lastDate: DateTime(2035, 12, 31),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: primaryColor,
-              onPrimary: Colors.white,
-              surface: Colors.white,
-              onSurface: textColor,
-            ),
-          ),
-          child: child!,
-        );
-      },
-    );
-
-    if (result != null) {
-      setState(() {
-        selectedHarvestDate = result;
-      });
-    }
-  }
-
-  Widget _buildHssField() {
+  Widget _buildStatusField() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildLabel('HSS saat panen'),
-
+        _buildLabel('Status panen'),
         const SizedBox(height: 8),
-
         Container(
-          width: double.infinity,
           height: 56,
-          alignment: Alignment.centerLeft,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 14),
           decoration: BoxDecoration(
-            color: softColor,
+            color: Colors.white,
+            border: Border.all(color: borderColor),
             borderRadius: BorderRadius.circular(16),
           ),
-          child: Text(
-            '$harvestHss HSS',
-            style: const TextStyle(
-              color: primaryColor,
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: _status,
+              isExpanded: true,
+              icon: const Icon(
+                Icons.keyboard_arrow_down_rounded,
+                color: primaryColor,
+              ),
+              items: const [
+                DropdownMenuItem(
+                  value: PanenModel.statusTerjadwal,
+                  child: Text('Terjadwal'),
+                ),
+                DropdownMenuItem(
+                  value: PanenModel.statusSelesai,
+                  child: Text('Selesai'),
+                ),
+              ],
+              onChanged: (value) {
+                if (value == null) {
+                  return;
+                }
+                setState(() {
+                  _status = value;
+                  if (value == PanenModel.statusTerjadwal) {
+                    _beratController.clear();
+                  }
+                });
+              },
             ),
           ),
         ),
@@ -456,105 +510,55 @@ class _TambahRotasiPanenViewState extends State<TambahRotasiPanenView> {
     );
   }
 
-  Widget _buildHolesField() {
+  Widget _buildBeratField() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildLabel('Lubang akan dipanen'),
-
+        _buildLabel('Berat hasil panen'),
         const SizedBox(height: 8),
-
-        SizedBox(
-          height: 56,
-          child: TextFormField(
-            controller: holesController,
-            keyboardType: TextInputType.number,
-            cursorColor: primaryColor,
-            style: const TextStyle(color: textColor, fontSize: 14),
-            decoration: _inputDecoration(),
-            validator: (value) {
-              final number = int.tryParse(value ?? '');
-              final available = selectedBatch['holes'] as int;
-
-              if (number == null || number <= 0) {
-                return 'Jumlah tidak valid';
-              }
-
-              if (number > available) {
-                return 'Melebihi stok lubang';
-              }
-
-              return null;
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildNoteField() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildLabel('Catatan rotasi (opsional)'),
-
-        const SizedBox(height: 8),
-
         TextFormField(
-          controller: noteController,
-          maxLines: 2,
+          controller: _beratController,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
           cursorColor: primaryColor,
-          style: const TextStyle(color: textColor, fontSize: 13, height: 1.4),
-          decoration: _inputDecoration().copyWith(
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 12,
-            ),
+          style: const TextStyle(color: textColor, fontSize: 14),
+          decoration: _inputDecoration(
+            hintText: 'Masukkan berat panen',
+            suffixText: 'kg',
           ),
+          validator: (value) {
+            if (_status != PanenModel.statusSelesai) {
+              return null;
+            }
+            final berat = double.tryParse(
+              (value ?? '').trim().replaceAll(',', '.'),
+            );
+            if (!PanenModel.isValidBeratKg(berat)) {
+              return 'Berat panen harus berupa angka valid dan minimal 0,01 kg.';
+            }
+            return null;
+          },
         ),
       ],
     );
   }
 
-  Widget _buildSchedulePreview() {
+  Widget _buildInfoCard() {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: softColor,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(16),
       ),
-      child: Column(
+      child: const Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
-            children: [
-              Icon(Icons.check_rounded, color: primaryColor, size: 19),
-
-              SizedBox(width: 10),
-
-              Expanded(
-                child: Text(
-                  'Jadwal panen siap disimpan',
-                  style: TextStyle(
-                    color: textColor,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 8),
-
-          Text(
-            '${_formatCompactDate(selectedHarvestDate)} • '
-            '$harvestHoles lubang • ${selectedBatch['name']}',
-            style: const TextStyle(
-              color: textColor,
-              fontSize: 11,
-              fontWeight: FontWeight.w400,
+          Icon(Icons.info_outline_rounded, color: primaryColor, size: 20),
+          SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Data panen terhubung ke budidaya yang dipilih. Berat wajib diisi saat status panen Selesai. Catatan atau nama batch tidak disimpan karena tidak tersedia pada endpoint panen.',
+              style: TextStyle(color: textColor, fontSize: 11, height: 1.45),
             ),
           ),
         ],
@@ -562,141 +566,175 @@ class _TambahRotasiPanenViewState extends State<TambahRotasiPanenView> {
     );
   }
 
-  Widget _buildBottomButtons(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: Container(
+  Widget _buildLoadingField(String message) {
+    return Container(
+      height: 56,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
         color: Colors.white,
-        padding: const EdgeInsets.fromLTRB(24, 10, 24, 16),
-        child: Row(
-          children: [
-            Expanded(
-              child: SizedBox(
-                height: 56,
+        border: Border.all(color: borderColor),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          const SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: primaryColor,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            message,
+            style: const TextStyle(color: mutedColor, fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRetryField(String message) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF5F2),
+        border: Border.all(color: const Color(0xFFF0D4CA)),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            message,
+            style: const TextStyle(color: Color(0xFF8E4135), fontSize: 11),
+          ),
+          TextButton.icon(
+            onPressed: _loadBudidayaOptions,
+            icon: const Icon(Icons.refresh_rounded, size: 16),
+            label: const Text('Coba lagi'),
+            style: TextButton.styleFrom(foregroundColor: primaryColor),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyField(String message) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF8E9),
+        border: Border.all(color: const Color(0xFFE9D9B6)),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Text(
+        message,
+        style: const TextStyle(color: Color(0xFF80662D), fontSize: 11),
+      ),
+    );
+  }
+
+  Widget _buildErrorCard(String message) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF5F2),
+        border: Border.all(color: const Color(0xFFF0D4CA)),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Text(
+        message,
+        style: const TextStyle(
+          color: Color(0xFF8E4135),
+          fontSize: 11,
+          height: 1.4,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBottomButtons() {
+    return AnimatedBuilder(
+      animation: _panenController,
+      builder: (context, _) {
+        final isSubmitting = _panenController.isSubmitting;
+        return Container(
+          padding: EdgeInsets.fromLTRB(
+            24,
+            12,
+            24,
+            MediaQuery.paddingOf(context).bottom + 16,
+          ),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            border: Border(top: BorderSide(color: Color(0xFFE8ECE3))),
+          ),
+          child: Row(
+            children: [
+              Expanded(
                 child: OutlinedButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                  },
+                  onPressed: isSubmitting ? null : () => Navigator.pop(context),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: primaryColor,
-                    side: const BorderSide(color: primaryColor, width: 1),
+                    foregroundColor: mutedColor,
+                    side: const BorderSide(color: borderColor),
+                    padding: const EdgeInsets.symmetric(vertical: 15),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(13),
                     ),
                   ),
-                  child: const Text(
-                    'Batal',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                  ),
+                  child: const Text('Batal'),
                 ),
               ),
-            ),
-
-            const SizedBox(width: 10),
-
-            Expanded(
-              child: SizedBox(
-                height: 56,
-                child: ElevatedButton(
-                  onPressed: _saveRotation,
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed:
+                      isSubmitting ||
+                          _isLoadingOptions ||
+                          _budidayaOptions.isEmpty
+                      ? null
+                      : _submit,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: primaryColor,
                     foregroundColor: Colors.white,
+                    disabledBackgroundColor: const Color(0xFFB8C3AA),
+                    padding: const EdgeInsets.symmetric(vertical: 15),
                     elevation: 0,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(13),
                     ),
                   ),
-                  child: const Text(
-                    'Simpan',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                  ),
+                  icon: isSubmitting
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.save_outlined, size: 18),
+                  label: Text(isSubmitting ? 'Menyimpan...' : 'Simpan panen'),
                 ),
               ),
-            ),
-          ],
-        ),
-      ),
+            ],
+          ),
+        );
+      },
     );
   }
 
-  void _saveRotation() {
-    if (!formKey.currentState!.validate()) {
-      return;
-    }
+  DateTime _dateOnly(DateTime value) =>
+      DateTime(value.year, value.month, value.day);
 
-    if (harvestHss <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Tanggal panen harus setelah tanggal semai.'),
-        ),
-      );
-      return;
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Jadwal rotasi panen masih menggunakan data dummy.'),
-      ),
-    );
-  }
-
-  String _formatShortDate(DateTime date) {
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'Mei',
-      'Jun',
-      'Jul',
-      'Agu',
-      'Sep',
-      'Okt',
-      'Nov',
-      'Des',
-    ];
-
-    return '${date.day.toString().padLeft(2, '0')} '
-        '${months[date.month - 1]} ${date.year}';
-  }
-
-  String _formatLongDate(DateTime date) {
-    const months = [
-      'Januari',
-      'Februari',
-      'Maret',
-      'April',
-      'Mei',
-      'Juni',
-      'Juli',
-      'Agustus',
-      'September',
-      'Oktober',
-      'November',
-      'Desember',
-    ];
-
-    return '${date.day.toString().padLeft(2, '0')} '
-        '${months[date.month - 1]} ${date.year}';
-  }
-
-  String _formatCompactDate(DateTime date) {
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'Mei',
-      'Jun',
-      'Jul',
-      'Agu',
-      'Sep',
-      'Okt',
-      'Nov',
-      'Des',
-    ];
-
-    return '${date.day} ${months[date.month - 1]} ${date.year}';
+  String _formatDate(DateTime value) {
+    final day = value.day.toString().padLeft(2, '0');
+    final month = value.month.toString().padLeft(2, '0');
+    return '$day/$month/${value.year}';
   }
 }

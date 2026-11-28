@@ -2,14 +2,16 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
-class KesehatanHasilDeteksiView extends StatelessWidget {
-  static const String sampleImage =
-      'https://images.unsplash.com/photo-1540420773420-3366772f4999'
-      '?auto=format&fit=crop&w=500&q=80';
+import '../../models/diagnosis/diagnosis_model.dart';
 
+/// Halaman hasil dengan susunan visual lama (dua kartu foto, temuan,
+/// informasi budidaya, catatan, disclaimer), tetapi data hasil berasal dari API.
+class KesehatanHasilDeteksiView extends StatelessWidget {
   final File? daunFoto;
   final File? batangFoto;
-  final String status;
+  final DiagnosisModel? daunDiagnosis;
+  final DiagnosisModel? batangDiagnosis;
+  final String? status;
   final String batchName;
   final String catatanGejala;
 
@@ -17,9 +19,11 @@ class KesehatanHasilDeteksiView extends StatelessWidget {
     super.key,
     this.daunFoto,
     this.batangFoto,
+    this.daunDiagnosis,
+    this.batangDiagnosis,
     required this.batchName,
     required this.catatanGejala,
-    this.status = 'Perlu perhatian',
+    this.status,
   });
 
   static const Color primaryColor = Color(0xFF6E8649);
@@ -28,6 +32,45 @@ class KesehatanHasilDeteksiView extends StatelessWidget {
   static const Color softGreen = Color(0xFFF1F5E9);
   static const Color warningColor = Color(0xFF8C5B16);
   static const Color warningBackground = Color(0xFFFFF5DF);
+  static const Color borderColor = Color(0xFFDFE5D7);
+
+  bool get _hasResults => daunDiagnosis != null && batangDiagnosis != null;
+
+  bool get _needsAttention {
+    return (daunDiagnosis != null && !daunDiagnosis!.isSehat) ||
+        (batangDiagnosis != null && !batangDiagnosis!.isSehat);
+  }
+
+  Color get _statusColor => _needsAttention ? warningColor : primaryColor;
+
+  Color get _statusBackground =>
+      _needsAttention ? warningBackground : softGreen;
+
+  String _formatConfidence(DiagnosisModel? diagnosis) {
+    if (diagnosis == null) return '—';
+    return '${diagnosis.confidence.toStringAsFixed(2)}%';
+  }
+
+  String _formatDate(DateTime date) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'Mei',
+      'Jun',
+      'Jul',
+      'Agu',
+      'Sep',
+      'Okt',
+      'Nov',
+      'Des',
+    ];
+    final day = date.day.toString().padLeft(2, '0');
+    final hour = date.hour.toString().padLeft(2, '0');
+    final minute = date.minute.toString().padLeft(2, '0');
+    return '$day ${months[date.month - 1]} ${date.year}, $hour.$minute';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -58,7 +101,6 @@ class KesehatanHasilDeteksiView extends StatelessWidget {
                 ],
               ),
             ),
-
             Expanded(
               child: Container(
                 width: double.infinity,
@@ -72,74 +114,37 @@ class KesehatanHasilDeteksiView extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _buildStatusCard(),
-
                       const SizedBox(height: 16),
-
                       Row(
                         children: [
                           Expanded(
                             child: _buildPhotoResult(
                               photo: daunFoto,
-                              title: 'Bercak daun',
-                              confidence: '92%',
-                              status: 'Perlu perhatian',
-                              isWarning: true,
+                              diagnosis: daunDiagnosis,
+                              titleFallback: 'Foto daun',
                             ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: _buildPhotoResult(
                               photo: batangFoto,
-                              title: 'Sehat',
-                              confidence: '98%',
-                              status: 'Normal',
-                              isWarning: false,
+                              diagnosis: batangDiagnosis,
+                              titleFallback: 'Foto batang',
                             ),
                           ),
                         ],
                       ),
-
                       const SizedBox(height: 18),
-
                       _buildFindings(),
-
                       const SizedBox(height: 16),
-
                       _buildBatchInformation(),
-
                       const SizedBox(height: 12),
-
                       if (catatanGejala.trim().isNotEmpty) _buildUserNote(),
-
                       if (catatanGejala.trim().isNotEmpty)
                         const SizedBox(height: 12),
-
                       _buildDisclaimer(),
-
                       const SizedBox(height: 16),
-
-                      const Row(
-                        children: [
-                          Icon(
-                            Icons.info_outline,
-                            size: 16,
-                            color: primaryColor,
-                          ),
-                          SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Ini merupakan tampilan contoh hasil. '
-                              'Analisis foto belum terhubung ke backend.',
-                              style: TextStyle(
-                                color: mutedColor,
-                                fontSize: 10,
-                                height: 1.4,
-                                fontFamily: 'Inter',
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+                      if (_hasResults) _buildSavedInformation(),
                     ],
                   ),
                 ),
@@ -152,35 +157,55 @@ class KesehatanHasilDeteksiView extends StatelessWidget {
   }
 
   Widget _buildStatusCard() {
+    final title = !_hasResults
+        ? 'Hasil belum tersedia'
+        : _needsAttention
+        ? 'Perlu perhatian'
+        : 'Normal';
+
+    final subtitle = !_hasResults
+        ? 'Data diagnosis lengkap belum tersedia dari server.'
+        : _needsAttention
+        ? 'Satu atau lebih foto memerlukan perhatian.'
+        : 'Kedua foto diklasifikasikan sehat oleh server.';
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: warningBackground,
+        color: _statusBackground,
         borderRadius: BorderRadius.circular(18),
       ),
-      child: const Column(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Contoh hasil • 2 foto diperiksa',
+            _hasResults
+                ? 'Hasil diagnosis • 2 foto diperiksa'
+                : 'Hasil diagnosis',
             style: TextStyle(
-              color: warningColor,
+              color: _statusColor,
               fontSize: 11,
               fontWeight: FontWeight.w500,
               fontFamily: 'Inter',
             ),
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           Row(
             children: [
-              Icon(Icons.warning_amber_rounded, color: warningColor, size: 25),
-              SizedBox(width: 9),
+              Icon(
+                _hasResults && !_needsAttention
+                    ? Icons.check_circle_rounded
+                    : Icons.warning_amber_rounded,
+                color: _statusColor,
+                size: 25,
+              ),
+              const SizedBox(width: 9),
               Expanded(
                 child: Text(
-                  'Perlu perhatian',
+                  title,
                   style: TextStyle(
-                    color: warningColor,
+                    color: _statusColor,
                     fontSize: 21,
                     fontWeight: FontWeight.w700,
                     fontFamily: 'Inter',
@@ -189,11 +214,11 @@ class KesehatanHasilDeteksiView extends StatelessWidget {
               ),
             ],
           ),
-          SizedBox(height: 5),
+          const SizedBox(height: 5),
           Text(
-            'Perubahan warna dan bercak terlihat pada daun.',
+            subtitle,
             style: TextStyle(
-              color: warningColor,
+              color: _statusColor,
               fontSize: 11,
               fontFamily: 'Inter',
             ),
@@ -205,21 +230,34 @@ class KesehatanHasilDeteksiView extends StatelessWidget {
 
   Widget _buildPhotoResult({
     required File? photo,
-    required String title,
-    required String confidence,
-    required String status,
-    required bool isWarning,
+    required DiagnosisModel? diagnosis,
+    required String titleFallback,
   }) {
-    final Color statusColor = isWarning ? warningColor : primaryColor;
-
-    final Color statusBackground = isWarning ? warningBackground : softGreen;
+    final isHealthy = diagnosis?.isSehat ?? false;
+    final isAvailable = diagnosis != null;
+    final statusColor = isAvailable
+        ? (isHealthy ? primaryColor : warningColor)
+        : mutedColor;
+    final statusBackground = isAvailable
+        ? (isHealthy ? softGreen : warningBackground)
+        : const Color(0xFFF2F3F0);
+    final title = !isAvailable
+        ? 'Belum tersedia'
+        : isHealthy
+        ? 'Sehat'
+        : 'Tidak Sehat';
+    final statusLabel = !isAvailable
+        ? 'Belum tersedia'
+        : isHealthy
+        ? 'Normal'
+        : 'Perlu perhatian';
 
     return Container(
       height: 198,
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFDFE5D7)),
+        border: Border.all(color: borderColor),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
@@ -229,20 +267,20 @@ class KesehatanHasilDeteksiView extends StatelessWidget {
             height: 108,
             width: double.infinity,
             child: photo != null
-                ? Image.file(photo, fit: BoxFit.cover)
-                : Image.network(
-                    sampleImage,
+                ? Image.file(
+                    photo,
                     fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      return Container(
-                        color: softGreen,
-                        child: const Icon(
-                          Icons.eco_outlined,
-                          color: primaryColor,
-                        ),
-                      );
-                    },
-                  ),
+                    errorBuilder: (context, error, stackTrace) =>
+                        _imageFallback(),
+                  )
+                : diagnosis != null
+                ? Image.network(
+                    diagnosis.imageUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) =>
+                        _imageFallback(),
+                  )
+                : _imageFallback(),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 8, 6),
@@ -250,7 +288,7 @@ class KesehatanHasilDeteksiView extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  title,
+                  isAvailable ? title : titleFallback,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -262,10 +300,14 @@ class KesehatanHasilDeteksiView extends StatelessWidget {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  'Keyakinan contoh: $confidence',
+                  isAvailable
+                      ? '${diagnosis.hasilLabel} • Keyakinan: ${_formatConfidence(diagnosis)}'
+                      : 'Hasil pemeriksaan belum tersedia',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: textColor,
-                    fontSize: 10,
+                    fontSize: 9,
                     fontFamily: 'Inter',
                   ),
                 ),
@@ -280,7 +322,7 @@ class KesehatanHasilDeteksiView extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    status,
+                    statusLabel,
                     style: TextStyle(
                       color: statusColor,
                       fontSize: 9,
@@ -297,7 +339,18 @@ class KesehatanHasilDeteksiView extends StatelessWidget {
     );
   }
 
+  Widget _imageFallback() {
+    return Container(
+      color: softGreen,
+      alignment: Alignment.center,
+      child: const Icon(Icons.eco_outlined, color: primaryColor, size: 38),
+    );
+  }
+
   Widget _buildFindings() {
+    final leaf = daunDiagnosis;
+    final stem = batangDiagnosis;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -311,9 +364,11 @@ class KesehatanHasilDeteksiView extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 10),
-        const Text(
-          'Daun: bercak kecokelatan disertai area yang menguning.',
-          style: TextStyle(
+        Text(
+          leaf == null
+              ? 'Daun: hasil klasifikasi belum tersedia.'
+              : 'Daun: ${leaf.hasilLabel} • ${leaf.rekomendasi}',
+          style: const TextStyle(
             color: mutedColor,
             fontSize: 12,
             height: 1.4,
@@ -321,10 +376,11 @@ class KesehatanHasilDeteksiView extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 7),
-        const Text(
-          'Batang: permukaan tampak utuh, tanpa kerusakan '
-          'yang jelas pada foto.',
-          style: TextStyle(
+        Text(
+          stem == null
+              ? 'Batang: hasil klasifikasi belum tersedia.'
+              : 'Batang: ${stem.hasilLabel} • ${stem.rekomendasi}',
+          style: const TextStyle(
             color: mutedColor,
             fontSize: 12,
             height: 1.4,
@@ -336,6 +392,12 @@ class KesehatanHasilDeteksiView extends StatelessWidget {
   }
 
   Widget _buildBatchInformation() {
+    final budidaya = daunDiagnosis?.budidaya ?? batangDiagnosis?.budidaya;
+    final subtitle = budidaya == null
+        ? 'Budidaya yang dipilih saat pemeriksaan'
+        : 'Meja ${budidaya.meja?.nomorMeja ?? budidaya.mejaId} • '
+              '${budidaya.jumlahTanaman} tanaman • ${budidaya.hss} HSS';
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -356,9 +418,9 @@ class KesehatanHasilDeteksiView extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 5),
-          const Text(
-            'Batch yang dipilih saat pemeriksaan',
-            style: TextStyle(
+          Text(
+            subtitle,
+            style: const TextStyle(
               color: mutedColor,
               fontSize: 11,
               fontFamily: 'Inter',
@@ -405,6 +467,11 @@ class KesehatanHasilDeteksiView extends StatelessWidget {
   }
 
   Widget _buildDisclaimer() {
+    final disclaimer =
+        daunDiagnosis?.disclaimer ??
+        batangDiagnosis?.disclaimer ??
+        DiagnosisModel.disclaimerDefault;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(13),
@@ -412,16 +479,15 @@ class KesehatanHasilDeteksiView extends StatelessWidget {
         color: const Color(0xFFF7F8F4),
         borderRadius: BorderRadius.circular(16),
       ),
-      child: const Row(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.info_outline, size: 19, color: mutedColor),
-          SizedBox(width: 12),
+          const Icon(Icons.info_outline, size: 19, color: mutedColor),
+          const SizedBox(width: 12),
           Expanded(
             child: Text(
-              'Hasil foto bersifat indikatif, bukan diagnosis pasti. '
-              'Konfirmasi ke pendamping budidaya bila gejala meluas.',
-              style: TextStyle(
+              disclaimer,
+              style: const TextStyle(
                 color: mutedColor,
                 fontSize: 11,
                 height: 1.4,
@@ -431,6 +497,28 @@ class KesehatanHasilDeteksiView extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildSavedInformation() {
+    final date =
+        daunDiagnosis?.tanggalDiagnosis ?? batangDiagnosis!.tanggalDiagnosis;
+
+    return Row(
+      children: [
+        const Icon(Icons.check_rounded, size: 16, color: primaryColor),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            'Tersimpan di riwayat • ${_formatDate(date)}',
+            style: const TextStyle(
+              color: primaryColor,
+              fontSize: 10,
+              fontFamily: 'Inter',
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

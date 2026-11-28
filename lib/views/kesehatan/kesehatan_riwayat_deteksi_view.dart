@@ -1,9 +1,12 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 
-import 'kesehatan_hasil_deteksi_view.dart';
+import '../../controllers/diagnosis/diagnosis_controller.dart';
+import '../../models/diagnosis/diagnosis_model.dart';
+import 'kesehatan_riwayat_detail_view.dart';
 
+/// Riwayat diagnosis dengan susunan UI awal.
+/// Data bulan diambil dari API; pencarian dan kategori Perhatian difilter lokal
+/// karena endpoint diagnosis tidak menyediakan parameter pencarian/negasi hasil.
 class KesehatanRiwayatDeteksiView extends StatefulWidget {
   const KesehatanRiwayatDeteksiView({super.key});
 
@@ -21,73 +24,110 @@ class _KesehatanRiwayatDeteksiViewState
   static const Color warningColor = Color(0xFF8C5B16);
   static const Color warningBackground = Color(0xFFFFF5DF);
 
-  static const String sampleImage =
-      'https://images.unsplash.com/photo-1540420773420-3366772f4999'
-      '?auto=format&fit=crop&w=300&q=80';
-
+  final DiagnosisController _diagnosisController = DiagnosisController();
   final TextEditingController searchController = TextEditingController();
 
-  DateTime selectedMonth = DateTime(2026, 11, 1);
-
+  DateTime selectedMonth = DateTime(
+    DateTime.now().year,
+    DateTime.now().month,
+    1,
+  );
   String selectedFilter = 'Semua';
+  bool _isLoadingMonth = false;
+  bool _monthFullyLoaded = false;
 
-  final List<_DetectionRecord> records = [
-    _DetectionRecord(
-      batch: 'Batch 04 • Selada',
-      date: DateTime(2026, 11, 5, 9, 41),
-      location: 'Meja B1',
-      status: 'Perlu perhatian',
-    ),
-    _DetectionRecord(
-      batch: 'Batch 03 • Selada',
-      date: DateTime(2026, 11, 4, 8, 15),
-      location: 'Meja A1',
-      status: 'Normal',
-    ),
-    _DetectionRecord(
-      batch: 'Batch 05 • Selada',
-      date: DateTime(2026, 11, 3, 10, 20),
-      location: 'Meja C1',
-      status: 'Normal',
-    ),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _loadMonth();
+    });
+  }
 
   @override
   void dispose() {
     searchController.dispose();
+    _diagnosisController.dispose();
     super.dispose();
   }
 
-  List<_DetectionRecord> get monthRecords {
-    return records.where((record) {
-      return record.date.month == selectedMonth.month &&
-          record.date.year == selectedMonth.year;
-    }).toList();
+  DateTime get _monthStart =>
+      DateTime(selectedMonth.year, selectedMonth.month, 1);
+
+  DateTime get _monthEnd =>
+      DateTime(selectedMonth.year, selectedMonth.month + 1, 0);
+
+  Future<void> _loadMonth() async {
+    if (_isLoadingMonth) return;
+
+    _diagnosisController.reset();
+
+    setState(() {
+      _isLoadingMonth = true;
+      _monthFullyLoaded = false;
+    });
+
+    var complete = await _diagnosisController.loadDiagnoses(
+      from: _monthStart,
+      to: _monthEnd,
+      perPage: 50,
+    );
+
+    // Ambil seluruh halaman dalam bulan terpilih agar ringkasan normal/perhatian
+    // dihitung dari semua record bulan itu, bukan hanya halaman pertama.
+    while (complete && _diagnosisController.hasMoreDiagnoses && mounted) {
+      complete = await _diagnosisController.loadMoreDiagnoses();
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      _isLoadingMonth = false;
+      _monthFullyLoaded = complete && !_diagnosisController.hasMoreDiagnoses;
+    });
   }
 
-  List<_DetectionRecord> get filteredRecords {
+  List<DiagnosisModel> get monthRecords =>
+      _diagnosisController.diagnoses.where((record) {
+        return record.tanggalDiagnosis.year == selectedMonth.year &&
+            record.tanggalDiagnosis.month == selectedMonth.month;
+      }).toList();
+
+  List<DiagnosisModel> get filteredRecords {
     final query = searchController.text.toLowerCase().trim();
 
     return monthRecords.where((record) {
+      final matchesFilter = switch (selectedFilter) {
+        'Normal' => record.isSehat,
+        'Perlu perhatian' => !record.isSehat,
+        _ => true,
+      };
+
+      final meja = record.budidaya?.meja?.nomorMeja ?? record.budidaya?.mejaId;
+      final searchValues = [
+        'budidaya ${record.budidayaId}',
+        'budidaya #${record.budidayaId}',
+        'diagnosis ${record.id}',
+        'meja ${meja ?? ''}',
+        record.hasil,
+        record.hasilLabel,
+        record.user?.nama ?? '',
+        record.user?.username ?? '',
+      ];
       final matchesSearch =
-          record.batch.toLowerCase().contains(query) ||
-          record.location.toLowerCase().contains(query) ||
-          record.status.toLowerCase().contains(query);
+          query.isEmpty ||
+          searchValues.any((value) => value.toLowerCase().contains(query));
 
-      final matchesFilter =
-          selectedFilter == 'Semua' || record.status == selectedFilter;
-
-      return matchesSearch && matchesFilter;
+      return matchesFilter && matchesSearch;
     }).toList();
   }
 
-  int get totalCount => monthRecords.length;
+  int get totalCount => _diagnosisController.totalDiagnoses;
 
-  int get normalCount =>
-      monthRecords.where((record) => record.status == 'Normal').length;
+  int get normalCount => monthRecords.where((record) => record.isSehat).length;
 
   int get attentionCount =>
-      monthRecords.where((record) => record.status == 'Perlu perhatian').length;
+      monthRecords.where((record) => !record.isSehat).length;
 
   String _monthName(int month) {
     const months = [
@@ -160,7 +200,18 @@ class _KesehatanRiwayatDeteksiViewState
       setState(() {
         selectedMonth = DateTime(pickedDate.year, pickedDate.month, 1);
       });
+      await _loadMonth();
     }
+  }
+
+  void _openDetail(DiagnosisModel record) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) =>
+            KesehatanRiwayatDetailView(diagnosisId: record.id),
+      ),
+    );
   }
 
   @override
@@ -192,7 +243,6 @@ class _KesehatanRiwayatDeteksiViewState
                 ],
               ),
             ),
-
             Expanded(
               child: Container(
                 width: double.infinity,
@@ -200,37 +250,55 @@ class _KesehatanRiwayatDeteksiViewState
                   color: Colors.white,
                   borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
                 ),
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 30),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildSearchField(),
-
-                      const SizedBox(height: 12),
-
-                      _buildFilterButtons(),
-
-                      const SizedBox(height: 16),
-
-                      _buildMonthSelector(),
-
-                      const SizedBox(height: 16),
-
-                      _buildSummary(),
-
-                      const SizedBox(height: 16),
-
-                      ...filteredRecords.map(
-                        (record) => Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: _buildHistoryCard(record),
-                        ),
+                child: AnimatedBuilder(
+                  animation: _diagnosisController,
+                  builder: (context, _) {
+                    return SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(24, 24, 24, 30),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildSearchField(),
+                          const SizedBox(height: 12),
+                          _buildFilterButtons(),
+                          const SizedBox(height: 16),
+                          _buildMonthSelector(),
+                          const SizedBox(height: 16),
+                          _buildSummary(),
+                          const SizedBox(height: 16),
+                          if (_diagnosisController.errorMessage != null &&
+                              monthRecords.isEmpty)
+                            _buildErrorState(),
+                          if (_isLoadingMonth && monthRecords.isEmpty)
+                            const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 25),
+                              child: Center(
+                                child: SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: primaryColor,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ...filteredRecords.map(
+                            (record) => Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: _buildHistoryCard(record),
+                            ),
+                          ),
+                          if (!_isLoadingMonth &&
+                              _diagnosisController.errorMessage == null &&
+                              filteredRecords.isEmpty)
+                            _buildEmptyState(),
+                          if (_diagnosisController.loadMoreErrorMessage != null)
+                            _buildLoadMoreError(),
+                        ],
                       ),
-
-                      if (filteredRecords.isEmpty) _buildEmptyState(),
-                    ],
-                  ),
+                    );
+                  },
                 ),
               ),
             ),
@@ -249,16 +317,14 @@ class _KesehatanRiwayatDeteksiViewState
       ),
       child: TextField(
         controller: searchController,
-        onChanged: (value) {
-          setState(() {});
-        },
+        onChanged: (value) => setState(() {}),
         style: const TextStyle(
           color: textColor,
           fontSize: 13,
           fontFamily: 'Inter',
         ),
         decoration: InputDecoration(
-          hintText: 'Cari batch atau kondisi...',
+          hintText: 'Cari budidaya atau kondisi...',
           hintStyle: const TextStyle(
             color: mutedColor,
             fontSize: 12,
@@ -297,7 +363,7 @@ class _KesehatanRiwayatDeteksiViewState
         Expanded(
           child: _buildFilterButton(
             label: 'Normal',
-            count: normalCount,
+            count: _monthFullyLoaded ? normalCount : null,
             filter: 'Normal',
             color: softGreen,
           ),
@@ -306,7 +372,7 @@ class _KesehatanRiwayatDeteksiViewState
         Expanded(
           child: _buildFilterButton(
             label: 'Perhatian',
-            count: attentionCount,
+            count: _monthFullyLoaded ? attentionCount : null,
             filter: 'Perlu perhatian',
             color: warningBackground,
           ),
@@ -317,7 +383,7 @@ class _KesehatanRiwayatDeteksiViewState
 
   Widget _buildFilterButton({
     required String label,
-    required int count,
+    required int? count,
     required String filter,
     required Color color,
   }) {
@@ -347,7 +413,7 @@ class _KesehatanRiwayatDeteksiViewState
         child: FittedBox(
           fit: BoxFit.scaleDown,
           child: Text(
-            '$label ($count)',
+            '$label${count == null ? '' : ' ($count)'}',
             style: TextStyle(
               color: foreground,
               fontSize: 10,
@@ -382,8 +448,7 @@ class _KesehatanRiwayatDeteksiViewState
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                '${_monthName(selectedMonth.month)} '
-                '${selectedMonth.year}',
+                '${_monthName(selectedMonth.month)} ${selectedMonth.year}',
                 style: const TextStyle(
                   color: textColor,
                   fontSize: 13,
@@ -404,6 +469,10 @@ class _KesehatanRiwayatDeteksiViewState
   }
 
   Widget _buildSummary() {
+    final subtitle = _monthFullyLoaded
+        ? '$normalCount normal, $attentionCount perlu perhatian'
+        : 'Memuat ringkasan pemeriksaan...';
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -415,7 +484,9 @@ class _KesehatanRiwayatDeteksiViewState
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '$totalCount pemeriksaan tersimpan',
+            _isLoadingMonth && monthRecords.isEmpty
+                ? 'Memuat pemeriksaan...'
+                : '$totalCount pemeriksaan tersimpan',
             style: const TextStyle(
               color: textColor,
               fontSize: 16,
@@ -425,7 +496,7 @@ class _KesehatanRiwayatDeteksiViewState
           ),
           const SizedBox(height: 4),
           Text(
-            '$normalCount normal, $attentionCount perlu perhatian',
+            subtitle,
             style: const TextStyle(
               color: mutedColor,
               fontSize: 11,
@@ -437,28 +508,14 @@ class _KesehatanRiwayatDeteksiViewState
     );
   }
 
-  Widget _buildHistoryCard(_DetectionRecord record) {
-    final bool isWarning = record.status == 'Perlu perhatian';
-
+  Widget _buildHistoryCard(DiagnosisModel record) {
+    final bool isWarning = !record.isSehat;
     final Color statusColor = isWarning ? warningColor : primaryColor;
-
     final Color statusBackground = isWarning ? warningBackground : softGreen;
+    final meja = record.budidaya?.meja?.nomorMeja ?? record.budidaya?.mejaId;
 
     return InkWell(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => KesehatanHasilDeteksiView(
-              daunFoto: record.daunFoto,
-              batangFoto: record.batangFoto,
-              batchName: record.batch,
-              catatanGejala: record.catatanGejala,
-              status: record.status,
-            ),
-          ),
-        );
-      },
+      onTap: () => _openDetail(record),
       borderRadius: BorderRadius.circular(16),
       child: Container(
         height: 108,
@@ -473,7 +530,7 @@ class _KesehatanRiwayatDeteksiViewState
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
               child: Image.network(
-                sampleImage,
+                record.imageUrl,
                 width: 90,
                 height: 90,
                 fit: BoxFit.cover,
@@ -491,16 +548,14 @@ class _KesehatanRiwayatDeteksiViewState
                 },
               ),
             ),
-
             const SizedBox(width: 10),
-
             Expanded(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    record.batch,
+                    'Budidaya #${record.budidayaId}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -512,7 +567,7 @@ class _KesehatanRiwayatDeteksiViewState
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    _formatDate(record.date),
+                    _formatDate(record.tanggalDiagnosis),
                     style: const TextStyle(
                       color: mutedColor,
                       fontSize: 10,
@@ -521,7 +576,7 @@ class _KesehatanRiwayatDeteksiViewState
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    record.location,
+                    meja == null ? 'ID diagnosis ${record.id}' : 'Meja $meja',
                     style: const TextStyle(
                       color: mutedColor,
                       fontSize: 10,
@@ -539,7 +594,7 @@ class _KesehatanRiwayatDeteksiViewState
                       borderRadius: BorderRadius.circular(7),
                     ),
                     child: Text(
-                      record.status,
+                      isWarning ? 'Perlu perhatian' : 'Normal',
                       style: TextStyle(
                         color: statusColor,
                         fontSize: 9,
@@ -551,7 +606,6 @@ class _KesehatanRiwayatDeteksiViewState
                 ],
               ),
             ),
-
             const Icon(
               Icons.chevron_right_rounded,
               color: mutedColor,
@@ -559,6 +613,56 @@ class _KesehatanRiwayatDeteksiViewState
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildErrorState() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 35),
+      child: Center(
+        child: Column(
+          children: [
+            const Icon(Icons.cloud_off_rounded, size: 42, color: mutedColor),
+            const SizedBox(height: 12),
+            const Text(
+              'Riwayat gagal dimuat',
+              style: TextStyle(
+                color: textColor,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                fontFamily: 'Inter',
+              ),
+            ),
+            const SizedBox(height: 5),
+            Text(
+              _diagnosisController.errorMessage ?? 'Silakan coba lagi.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: mutedColor,
+                fontSize: 11,
+                fontFamily: 'Inter',
+              ),
+            ),
+            TextButton.icon(
+              onPressed: _isLoadingMonth ? null : _loadMonth,
+              icon: const Icon(Icons.refresh_rounded, size: 16),
+              label: const Text('Coba lagi'),
+              style: TextButton.styleFrom(foregroundColor: primaryColor),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLoadMoreError() {
+    return Center(
+      child: TextButton.icon(
+        onPressed: _isLoadingMonth ? null : _loadMonth,
+        icon: const Icon(Icons.refresh_rounded, size: 16),
+        label: const Text('Muat ulang riwayat'),
+        style: TextButton.styleFrom(foregroundColor: primaryColor),
       ),
     );
   }
@@ -598,25 +702,4 @@ class _KesehatanRiwayatDeteksiViewState
       ),
     );
   }
-}
-
-class _DetectionRecord {
-  final String batch;
-  final DateTime date;
-  final String location;
-  final String status;
-
-  final File? daunFoto;
-  final File? batangFoto;
-  final String catatanGejala;
-
-  const _DetectionRecord({
-    required this.batch,
-    required this.date,
-    required this.location,
-    required this.status,
-    this.daunFoto,
-    this.batangFoto,
-    this.catatanGejala = '',
-  });
 }
